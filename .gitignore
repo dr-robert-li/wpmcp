@@ -1,0 +1,47 @@
+# Operating System Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editor/IDE Files
+.idea/
+.vscode/
+*.sublime-project
+*.sublime-workspace
+.project
+.settings/
+*.swp
+*.swo
+
+# (excluding server sub-component)
+server/
+
+# WordPress Plugin Files to Ignore
+/wpmcp/vendor/
+/wpmcp/*.zip
+
+# Environment Files
+.env
+.env.local
+.env.development
+.env.test
+.env.production
+wp-sites.json
+venv/
+env/
+
+# Logs
+logs/
+*.log
+
+# Optional eslint cache
+.eslintcache
+
+# dotenv environment variable files
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Temporary files
+tmp/
+temp/
