@@ -316,47 +316,66 @@ class WPMCP {
     /**
      * Handle consent request.
      *
-     * @since    2.0.0
-     * @param    WP_REST_Request    $request    The request.
-     * @return   WP_REST_Response|WP_Error      The response or error.
+     * @param WP_REST_Request $request The request.
+     * @return array|WP_Error The response or error.
      */
     public function handle_consent_request($request) {
-        $params = $request->get_json_params();
+        $json_str = file_get_contents('php://input');
+        $data = json_decode($json_str, true);
         
-        if (!isset($params['tool']) || !isset($params['session_id'])) {
-            $error = new WP_Error('invalid_request', 'Missing required parameters', array('status' => 400));
-            return rest_ensure_response($this->error_handler->convert_wp_error($error));
+        if (!$data || !isset($data['tool']) || !isset($data['arguments']) || !isset($data['user_id'])) {
+            return new WP_Error('invalid_request', 'Invalid consent request format', array('status' => 400));
         }
         
-        $tool_name = $params['tool'];
-        $arguments = isset($params['arguments']) ? $params['arguments'] : array();
-        $session_id = $params['session_id'];
-        $user_id = isset($params['user_id']) ? $params['user_id'] : 'anonymous';
+        $tool = $data['tool'];
+        $arguments = $data['arguments'];
+        $user_id = $data['user_id'];
+        $session_id = isset($data['session_id']) ? $data['session_id'] : '';
         
-        // Record consent
-        $consent_recorded = $this->consent_manager->record_consent($tool_name, $arguments, $user_id, $session_id);
+        // Check tool permission level
+        $tool_permissions = get_option('wpmcp_tool_permissions', array(
+            'wp_discover_endpoints' => 'api_key',
+            'wp_call_endpoint' => 'admin'
+        ));
         
-        if (!$consent_recorded) {
-            $error = new WP_Error('consent_error', 'Failed to record consent', array('status' => 500));
-            return rest_ensure_response($this->error_handler->convert_wp_error($error));
+        $required_permission = isset($tool_permissions[$tool]) ? $tool_permissions[$tool] : 'api_key';
+        
+        // If admin permission is required, verify user is admin
+        if ($required_permission === 'admin') {
+            $user = get_userdata($user_id);
+            
+            if (!$user || !in_array('administrator', $user->roles)) {
+                // Log denied consent
+                $this->consent_manager->record_consent($tool, $arguments, $user_id, $session_id, 'denied');
+                
+                return new WP_Error(
+                    'permission_denied',
+                    'This operation requires administrator privileges',
+                    array('status' => 403)
+                );
+            }
         }
         
         // Generate consent token
-        $token = $this->consent_manager->generate_consent_token($tool_name);
+        $token = $this->consent_manager->generate_consent_token($tool, $arguments, $user_id, $session_id);
         
-        return rest_ensure_response(array(
-            'success' => true,
-            'token' => $token,
-            'expires_in' => 300 // 5 minutes
-        ));
+        // Record the consent action
+        $this->consent_manager->record_consent($tool, $arguments, $user_id, $session_id, 'approved');
+        
+        return array(
+            'type' => 'consent_token',
+            'data' => array(
+                'token' => $token,
+                'expires_in' => 300 // 5 minutes
+            )
+        );
     }
     
     /**
-     * Handle invoke request.
+     * Handle tool invocation.
      *
-     * @since    2.0.0
-     * @param    array    $data    Request data.
-     * @return   array|WP_Error    Response data or error.
+     * @param array $data The request data.
+     * @return array|WP_Error The response or error.
      */
     private function handle_invoke($data) {
         if (!isset($data['name']) || !isset($data['arguments'])) {
@@ -365,7 +384,32 @@ class WPMCP {
         
         $tool_name = $data['name'];
         $arguments = $data['arguments'];
-        $consent_token = isset($data['consentToken']) ? $data['consentToken'] : null;
+        $consent_token = isset($data['consent_token']) ? $data['consent_token'] : '';
+        
+        // Check tool permission level
+        $tool_permissions = get_option('wpmcp_tool_permissions', array(
+            'wp_discover_endpoints' => 'api_key',
+            'wp_call_endpoint' => 'admin'
+        ));
+        
+        $required_permission = isset($tool_permissions[$tool_name]) ? $tool_permissions[$tool_name] : 'api_key';
+        
+        // If admin permission is required, verify user from consent token
+        if ($required_permission === 'admin' && !empty($consent_token)) {
+            $token_data = json_decode(base64_decode($consent_token), true);
+            
+            if (is_array($token_data) && isset($token_data['user_id'])) {
+                $user = get_userdata($token_data['user_id']);
+                
+                if (!$user || !in_array('administrator', $user->roles)) {
+                    return new WP_Error(
+                        'permission_denied',
+                        'This operation requires administrator privileges',
+                        array('status' => 403)
+                    );
+                }
+            }
+        }
         
         // Check if consent is required for this tool
         if ($this->consent_manager->is_consent_required($tool_name)) {
@@ -384,7 +428,7 @@ class WPMCP {
         // Handle different tools
         switch ($tool_name) {
             case 'wp_discover_endpoints':
-                return $this->discover_endpoints();
+                return $this->api_handler->discover_endpoints();
                 
             case 'wp_call_endpoint':
                 if (!isset($arguments['endpoint'])) {

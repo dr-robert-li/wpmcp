@@ -96,6 +96,49 @@
         </div>
         
         <div class="wpmcp-settings-section">
+            <h2><?php _e('Tool Permissions', 'wpmcp'); ?></h2>
+            <table class="form-table">
+                <tr>
+                    <th scope="row"><?php _e('Permission Levels', 'wpmcp'); ?></th>
+                    <td>
+                        <?php 
+                        $tool_permissions = get_option('wpmcp_tool_permissions', array(
+                            'wp_discover_endpoints' => 'api_key',
+                            'wp_call_endpoint' => 'admin'
+                        ));
+                        
+                        $available_tools = array(
+                            'wp_discover_endpoints' => __('Discover Endpoints', 'wpmcp'),
+                            'wp_call_endpoint' => __('Call Endpoint', 'wpmcp')
+                        );
+                        
+                        $permission_levels = array(
+                            'api_key' => __('API Key Only', 'wpmcp'),
+                            'admin' => __('Admin Required', 'wpmcp')
+                        );
+                        
+                        foreach ($available_tools as $tool => $label): 
+                            $current_permission = isset($tool_permissions[$tool]) ? $tool_permissions[$tool] : 'api_key';
+                        ?>
+                            <p>
+                                <label><strong><?php echo esc_html($label); ?></strong></label><br>
+                                <select name="wpmcp_tool_permissions[<?php echo esc_attr($tool); ?>]">
+                                    <?php foreach ($permission_levels as $level => $level_label): ?>
+                                        <option value="<?php echo esc_attr($level); ?>" <?php selected($current_permission, $level); ?>>
+                                            <?php echo esc_html($level_label); ?>
+                                        </option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </p>
+                        <?php endforeach; ?>
+                        <p class="description"><?php _e('Set permission levels for each tool. "API Key Only" allows any request with a valid API key. "Admin Required" requires the request to be authenticated as an admin user.', 'wpmcp'); ?></p>
+                    </td>
+                </tr>
+            </table>
+
+        </div>
+
+        <div class="wpmcp-settings-section">
             <h2>Prompt Templates</h2>
             <p>Configure prompt templates that can be used by AI assistants.</p>
             
@@ -616,74 +659,225 @@
                 $('#consent-logs-table').toggle();
                 
                 if ($('#consent-logs-table').is(':visible')) {
-                    // In a real implementation, this would fetch logs from the server
-                    // For now, we'll just show sample data
-                    const sampleLogs = [
-                        {
-                            time: '2023-04-28 10:15:22',
-                            user: 'admin',
-                            tool: 'wp_call_endpoint',
-                            arguments: JSON.stringify({
-                                endpoint: '/wp/v2/posts',
-                                method: 'POST',
-                                params: {
-                                    title: 'New Post',
-                                    content: 'Post content',
-                                    status: 'draft'
-                                }
-                            }),
-                            status: 'approved'
+                    // Show loading indicator
+                    $('#consent-logs-body').html('<tr><td colspan="6">Loading...</td></tr>');
+                    
+                    // Fetch logs from the server
+                    $.ajax({
+                        url: ajaxurl,
+                        type: 'POST',
+                        data: {
+                            action: 'wpmcp_get_consent_logs',
+                            nonce: wpmcp_admin.nonce,
+                            page: 1,
+                            per_page: 20
                         },
-                        {
-                            time: '2023-04-27 15:30:45',
-                            user: 'editor',
-                            tool: 'wp_call_endpoint',
-                            arguments: JSON.stringify({
-                                endpoint: '/wp/v2/comments/123',
-                                method: 'DELETE'
-                            }),
-                            status: 'denied'
+                        success: function(response) {
+                            if (response.success && response.data.logs) {
+                                const logs = response.data.logs;
+                                
+                                if (logs.length === 0) {
+                                    $('#consent-logs-body').html('<tr><td colspan="6">No logs available</td></tr>');
+                                    return;
+                                }
+                                
+                                let logsHtml = '';
+                                logs.forEach(log => {
+                                    // Format timestamp
+                                    const date = new Date(log.timestamp);
+                                    const formattedDate = date.toLocaleString();
+                                    
+                                    // Format arguments for display
+                                    let argsDisplay = '';
+                                    try {
+                                        if (typeof log.arguments === 'object') {
+                                            // Arguments are already parsed
+                                            argsDisplay = JSON.stringify(log.arguments, null, 2);
+                                        } else {
+                                            // Parse arguments if they're a string
+                                            argsDisplay = JSON.stringify(JSON.parse(log.arguments), null, 2);
+                                        }
+                                        // Truncate if too long
+                                        if (argsDisplay.length > 100) {
+                                            argsDisplay = argsDisplay.substring(0, 100) + '...';
+                                        }
+                                    } catch (e) {
+                                        argsDisplay = 'Error parsing arguments';
+                                    }
+                                    
+                                    // Create table row
+                                    logsHtml += `
+                                        <tr>
+                                            <td>${formattedDate}</td>
+                                            <td>${log.user_name} (ID: ${log.user_id})</td>
+                                            <td>${log.tool_name}</td>
+                                            <td><pre>${argsDisplay}</pre></td>
+                                            <td>${log.status}</td>
+                                            <td>${log.ip_address}</td>
+                                        </tr>
+                                    `;
+                                });
+                                
+                                $('#consent-logs-body').html(logsHtml);
+                                
+                                // Add pagination if needed
+                                if (response.data.pages > 1) {
+                                    let paginationHtml = '<div class="tablenav"><div class="tablenav-pages">';
+                                    paginationHtml += `<span class="displaying-num">${response.data.total} items</span>`;
+                                    
+                                    if (response.data.current_page > 1) {
+                                        paginationHtml += `<a class="prev-page button consent-log-page" data-page="${response.data.current_page - 1}"><span class="screen-reader-text">Previous page</span><span aria-hidden="true">‹</span></a>`;
+                                    } else {
+                                        paginationHtml += `<span class="prev-page button disabled"><span class="screen-reader-text">Previous page</span><span aria-hidden="true">‹</span></span>`;
+                                    }
+                                    
+                                    paginationHtml += `<span class="paging-input">${response.data.current_page} of <span class="total-pages">${response.data.pages}</span></span>`;
+                                    
+                                    if (response.data.current_page < response.data.pages) {
+                                        paginationHtml += `<a class="next-page button consent-log-page" data-page="${response.data.current_page + 1}"><span class="screen-reader-text">Next page</span><span aria-hidden="true">›</span></a>`;
+                                    } else {
+                                        paginationHtml += `<span class="next-page button disabled"><span class="screen-reader-text">Next page</span><span aria-hidden="true">›</span></span>`;
+                                    }
+                                    
+                                    paginationHtml += '</div></div>';
+                                    
+                                    $('#consent-logs-pagination').html(paginationHtml);
+                                } else {
+                                    $('#consent-logs-pagination').html('');
+                                }
+                            } else {
+                                $('#consent-logs-body').html('<tr><td colspan="6">Error loading logs</td></tr>');
+                            }
+                        },
+                        error: function() {
+                            $('#consent-logs-body').html('<tr><td colspan="6">Error loading logs</td></tr>');
                         }
-                    ];
-                    
-                    let logsHtml = '';
-                    sampleLogs.forEach(log => {
-                        logsHtml += `
-                            <tr>
-                                <td>${log.time}</td>
-                                <td>${log.user}</td>
-                                <td>${log.tool}</td>
-                                <td><pre style="margin: 0; max-height: 100px; overflow-y: auto;">${log.arguments}</pre></td>
-                                <td>
-                                    <span class="wpmcp-status wpmcp-status-${log.status === 'approved' ? 'success' : 'error'}">
-                                        ${log.status}
-                                    </span>
-                                </td>
-                            </tr>
-                        `;
                     });
-                    
-                    $('#consent-logs-body').html(logsHtml);
                 }
             });
-            
+
+            // Handle pagination clicks
+            $(document).on('click', '.consent-log-page', function(e) {
+                e.preventDefault();
+                const page = $(this).data('page');
+                
+                // Show loading indicator
+                $('#consent-logs-body').html('<tr><td colspan="6">Loading...</td></tr>');
+                
+                // Fetch logs for the selected page
+                $.ajax({
+                    url: ajaxurl,
+                    type: 'POST',
+                    data: {
+                        action: 'wpmcp_get_consent_logs',
+                        nonce: wpmcp_admin.nonce,
+                        page: page,
+                        per_page: 20
+                    },
+                    success: function(response) {
+                        // Same handling as above, could be refactored into a function
+                        if (response.success && response.data.logs) {
+                            const logs = response.data.logs;
+                            
+                            if (logs.length === 0) {
+                                $('#consent-logs-body').html('<tr><td colspan="6">No logs available</td></tr>');
+                                return;
+                            }
+                            
+                            let logsHtml = '';
+                            logs.forEach(log => {
+                                // Format timestamp
+                                const date = new Date(log.timestamp);
+                                const formattedDate = date.toLocaleString();
+                                
+                                // Format arguments for display
+                                let argsDisplay = '';
+                                try {
+                                    if (typeof log.arguments === 'object') {
+                                        argsDisplay = JSON.stringify(log.arguments, null, 2);
+                                    } else {
+                                        argsDisplay = JSON.stringify(JSON.parse(log.arguments), null, 2);
+                                    }
+                                    if (argsDisplay.length > 100) {
+                                        argsDisplay = argsDisplay.substring(0, 100) + '...';
+                                    }
+                                } catch (e) {
+                                    argsDisplay = 'Error parsing arguments';
+                                }
+                                
+                                // Create table row
+                                logsHtml += `
+                                    <tr>
+                                        <td>${formattedDate}</td>
+                                        <td>${log.user_name} (ID: ${log.user_id})</td>
+                                        <td>${log.tool_name}</td>
+                                        <td><pre>${argsDisplay}</pre></td>
+                                        <td>${log.status}</td>
+                                        <td>${log.ip_address}</td>
+                                    </tr>
+                                `;
+                            });
+                            
+                            $('#consent-logs-body').html(logsHtml);
+                            
+                            // Update pagination
+                            if (response.data.pages > 1) {
+                                let paginationHtml = '<div class="tablenav"><div class="tablenav-pages">';
+                                paginationHtml += `<span class="displaying-num">${response.data.total} items</span>`;
+                                
+                                if (response.data.current_page > 1) {
+                                    paginationHtml += `<a class="prev-page button consent-log-page" data-page="${response.data.current_page - 1}"><span class="screen-reader-text">Previous page</span><span aria-hidden="true">‹</span></a>`;
+                                } else {
+                                    paginationHtml += `<span class="prev-page button disabled"><span class="screen-reader-text">Previous page</span><span aria-hidden="true">‹</span></span>`;
+                                }
+                                
+                                paginationHtml += `<span class="paging-input">${response.data.current_page} of <span class="total-pages">${response.data.pages}</span></span>`;
+                                
+                                if (response.data.current_page < response.data.pages) {
+                                    paginationHtml += `<a class="next-page button consent-log-page" data-page="${response.data.current_page + 1}"><span class="screen-reader-text">Next page</span><span aria-hidden="true">›</span></a>`;
+                                } else {
+                                    paginationHtml += `<span class="next-page button disabled"><span class="screen-reader-text">Next page</span><span aria-hidden="true">›</span></span>`;
+                                }
+                                
+                                paginationHtml += '</div></div>';
+                                
+                                $('#consent-logs-pagination').html(paginationHtml);
+                            } else {
+                                $('#consent-logs-pagination').html('');
+                            }
+                        } else {
+                            $('#consent-logs-body').html('<tr><td colspan="6">Error loading logs</td></tr>');
+                        }
+                    },
+                    error: function() {
+                        $('#consent-logs-body').html('<tr><td colspan="6">Error loading logs</td></tr>');
+                    }
+                });
+            });
+
             // Clear consent logs
             $('#clear-consent-logs').on('click', function() {
                 if (confirm('Are you sure you want to clear all consent logs? This action cannot be undone.')) {
-                    // In a real implementation, this would clear logs on the server
-                    $('#consent-logs-body').html('<tr><td colspan="5">No logs available</td></tr>');
-                    alert('Logs cleared successfully');
+                    $.ajax({
+                        url: ajaxurl,
+                        type: 'POST',
+                        data: {
+                            action: 'wpmcp_clear_consent_logs',
+                            nonce: wpmcp_admin.nonce
+                        },
+                        success: function(response) {
+                            if (response.success) {
+                                $('#consent-logs-body').html('<tr><td colspan="6">No logs available</td></tr>');
+                                $('#consent-logs-pagination').html('');
+                                alert('Logs cleared successfully');
+                            } else {
+                                alert('Failed to clear logs: ' + (response.data || 'Unknown error'));
+                            }
+                        },
+                        error: function() {
+                            alert('Failed to clear logs due to a server error');
+                        }
+                    });
                 }
             });
-            
-            // Unsubscribe from resource
-            $(document).on('click', '.unsubscribe-resource', function() {
-                if (confirm('Are you sure you want to unsubscribe from this resource?')) {
-                    const uri = $(this).data('uri');
-                    // In a real implementation, this would unsubscribe on the server
-                    $(this).closest('tr').remove();
-                    alert('Unsubscribed from resource: ' + uri);
-                }
-            });
-        });
     </script>
