@@ -139,7 +139,7 @@ class WPMCP {
         
         $this->loader->add_action('admin_enqueue_scripts', $plugin_admin, 'enqueue_styles');
         $this->loader->add_action('admin_enqueue_scripts', $plugin_admin, 'enqueue_scripts');
-        $this->loader->add_action('admin_menu', $plugin_admin, 'add_options_page');
+        $this->loader->add_action('admin_menu', $plugin_admin, 'add_admin_menu');
         $this->loader->add_action('admin_init', $plugin_admin, 'register_settings');
     }
     
@@ -217,14 +217,20 @@ class WPMCP {
     public function verify_api_key($request) {
         $headers = $request->get_headers();
         
-        // Check for API key in headers (case-insensitive)
+        // Debug output to see what headers are being received
+        error_log('WPMCP Debug - Headers: ' . print_r($headers, true));
+        
+        // Check for API key in headers (WordPress normalizes header names to lowercase)
         if (isset($headers['x-api-key']) && !empty($headers['x-api-key'][0])) {
             return $headers['x-api-key'][0] === $this->api_key;
         }
         
-        // Also check for X-API-Key (capital letters)
-        if (isset($headers['x-api-key']) && !empty($headers['x-api-key'][0])) {
-            return $headers['x-api-key'][0] === $this->api_key;
+        // Also check for other common header variations
+        $header_variations = ['x-apikey', 'x_api_key', 'apikey', 'api_key'];
+        foreach ($header_variations as $header) {
+            if (isset($headers[$header]) && !empty($headers[$header][0])) {
+                return $headers[$header][0] === $this->api_key;
+            }
         }
         
         // Check for API key in request body as fallback
@@ -236,7 +242,7 @@ class WPMCP {
         }
         
         return false;
-    }
+    }    
     
     /**
      * Handle MCP request.

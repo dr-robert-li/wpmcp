@@ -12,22 +12,13 @@
     <h1>WordPress Model Context Protocol (MCP) Settings</h1>
     <p>This plugin enables AI assistants to interact with your WordPress site through the REST API using the Model Context Protocol.</p>
     
-    <nav class="nav-tab-wrapper">
-        <a href="#general-settings" class="nav-tab nav-tab-active">General</a>
-        <a href="#resource-settings" class="nav-tab">Resources</a>
-        <a href="#prompt-settings" class="nav-tab">Prompts</a>
-        <a href="#security-settings" class="nav-tab">Security</a>
-        <a href="#usage-info" class="nav-tab">Usage</a>
-        <a href="#logs" class="nav-tab">Logs</a>
-    </nav>
-    
     <form method="post" action="options.php">
         <?php
         settings_fields('wpmcp_settings');
         do_settings_sections('wpmcp_settings');
         ?>
         
-        <div id="general-settings" class="tab-content active">
+        <div class="wpmcp-settings-section">
             <h2>General Settings</h2>
             <table class="form-table">
                 <tr>
@@ -54,7 +45,7 @@
             </table>
         </div>
         
-        <div id="resource-settings" class="tab-content">
+        <div class="wpmcp-settings-section">
             <h2>Resource Settings</h2>
             <p>Configure which WordPress resources can be accessed via the MCP API and how resource changes are handled.</p>
             
@@ -64,6 +55,8 @@
                     <td>
                         <?php 
                         $allowed_endpoints = get_option('wpmcp_allowed_endpoints', array('posts', 'pages', 'categories', 'tags', 'comments', 'users'));
+                        $allowed_endpoints = is_array($allowed_endpoints) ? $allowed_endpoints : array();
+                        
                         $available_endpoints = array(
                             'posts' => 'Posts',
                             'pages' => 'Pages',
@@ -102,12 +95,13 @@
             </table>
         </div>
         
-        <div id="prompt-settings" class="tab-content">
+        <div class="wpmcp-settings-section">
             <h2>Prompt Templates</h2>
             <p>Configure prompt templates that can be used by AI assistants.</p>
             
             <?php 
             $prompt_templates = get_option('wpmcp_prompt_templates', array());
+            $prompt_templates = is_array($prompt_templates) ? $prompt_templates : array();
             ?>
             
             <div id="prompt-templates-container">
@@ -190,7 +184,7 @@
             <input type="hidden" name="wpmcp_prompt_templates" id="wpmcp-prompt-templates-json" value="<?php echo esc_attr(json_encode($prompt_templates)); ?>">
         </div>
         
-        <div id="security-settings" class="tab-content">
+        <div class="wpmcp-settings-section">
             <h2>Security Settings</h2>
             <p>Configure security settings for the MCP API.</p>
             
@@ -209,7 +203,7 @@
             </table>
         </div>
         
-        <div id="usage-info" class="tab-content">
+        <div class="wpmcp-settings-section">
             <h2>Usage Information</h2>
             <p>Endpoint URL: <code><?php echo esc_url(rest_url('wpmcp/v1/data')); ?></code></p>
             <p>This plugin implements the Model Context Protocol (MCP) standard, allowing AI assistants to:</p>
@@ -278,48 +272,6 @@
                     "x-api-key": "YOUR_API_KEY_HERE"
                 }
             }
-        },
-        {
-            "name": "resources/list",
-            "displayName": "WordPress List Resources",
-            "description": "Lists available WordPress resources",
-            "schema": {
-                "type": "object",
-                "properties": {
-                    "cursor": {
-                        "type": "string",
-                        "description": "Pagination cursor"
-                    }
-                },
-                "required": []
-            },
-            "server": {
-                "url": "<?php echo esc_url(rest_url('wpmcp/v1/data')); ?>",
-                "headers": {
-                    "x-api-key": "YOUR_API_KEY_HERE"
-                }
-            }
-        },
-        {
-            "name": "resources/read",
-            "displayName": "WordPress Read Resource",
-            "description": "Reads a specific WordPress resource",
-            "schema": {
-                "type": "object",
-                "properties": {
-                    "uri": {
-                        "type": "string",
-                        "description": "Resource URI (e.g., wp://posts/1)"
-                    }
-                },
-                "required": ["uri"]
-            },
-            "server": {
-                "url": "<?php echo esc_url(rest_url('wpmcp/v1/data')); ?>",
-                "headers": {
-                    "x-api-key": "YOUR_API_KEY_HERE"
-                }
-            }
         }
     ]
 }</pre>
@@ -328,7 +280,7 @@
             <p><strong>Note:</strong> Replace <code>YOUR_API_KEY_HERE</code> with the API key generated above.</p>
         </div>
         
-        <div id="logs" class="tab-content">
+        <div class="wpmcp-settings-section">
             <h2>Logs and Monitoring</h2>
             
             <h3>Consent Logs</h3>
@@ -363,6 +315,7 @@
             
             <?php
             $subscriptions = get_option('wpmcp_resource_subscriptions', array());
+            $subscriptions = is_array($subscriptions) ? $subscriptions : array();
             ?>
             
             <div id="resource-subscriptions-container">
@@ -382,290 +335,355 @@
                                     <td><?php echo esc_html($uri); ?></td>
                                     <td>
                                         <button type="button" class="button button-small unsubscribe-resource" 
-                                                data-uri="<?php echo esc_attr($uri); ?>">Unsubscribe</button>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                <?php endif; ?>
+                                            data-uri="<?php echo esc_attr($uri); ?>">Unsubscribe</button>
+                                        </td>
+                                    </tr>
+                                <?php endforeach; ?>
+                            </tbody>
+                        </table>
+                    <?php endif; ?>
+                </div>
             </div>
             
-            <h3>Pending Notifications</h3>
-            <p>View pending resource change notifications.</p>
-            
-            <?php
-            $notifications = get_option('wpmcp_resource_notifications', array());
-            ?>
-            
-            <div id="resource-notifications-container">
-                <?php if (empty($notifications)): ?>
-                    <p>No pending resource notifications.</p>
-                <?php else: ?>
-                    <table class="widefat">
-                        <thead>
-                            <tr>
-                                <th>Resource URI</th>
-                                <th>Action</th>
-                                <th>Timestamp</th>
-                                <th>Actions</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <?php foreach ($notifications as $index => $notification): ?>
-                                <tr>
-                                    <td><?php echo esc_html($notification['uri']); ?></td>
-                                    <td><?php echo esc_html($notification['action']); ?></td>
-                                    <td><?php echo esc_html($notification['timestamp']); ?></td>
-                                    <td>
-                                        <button type="button" class="button button-small clear-notification" 
-                                                data-index="<?php echo esc_attr($index); ?>">Clear</button>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                        </tbody>
-                    </table>
-                    <p>
-                        <button type="button" id="clear-all-notifications" class="button button-secondary">Clear All Notifications</button>
-                    </p>
-                <?php endif; ?>
-            </div>
+            <?php submit_button('Save Settings'); ?>
+        </form>
+        
+        <div class="wpmcp-footer">
+            <p>
+                WordPress Model Context Protocol (WPMCP) v<?php echo WPMCP_VERSION; ?> | 
+                <a href="https://github.com/dr-robert-li/wpmcp" target="_blank">GitHub</a> | 
+                <a href="https://github.com/dr-robert-li/wpmcp/issues" target="_blank">Report Issues</a>
+            </p>
         </div>
-        
-        <p class="submit">
-            <input type="submit" name="submit" id="submit" class="button button-primary" value="Save Changes">
-        </p>
-    </form>
-</div>
+    </div>
 
-<style>
-    .tab-content {
-        display: none;
-        padding: 20px 0;
-    }
-    
-    .tab-content.active {
-        display: block;
-    }
-    
-    .nav-tab-wrapper {
-        margin-bottom: 20px;
-    }
-    
-    .wpmcp-code-example {
-        background: #f9f9f9;
-        padding: 15px;
-        border: 1px solid #ddd;
-        border-radius: 4px;
-        margin: 15px 0;
-    }
-    
-    .wpmcp-code-example pre {
-        margin: 0;
-        overflow-x: auto;
-        white-space: pre-wrap;
-        word-wrap: break-word;
-    }
-</style>
+    <style>
+        .wpmcp-settings-section {
+            background: #fff;
+            border: 1px solid #ccd0d4;
+            border-radius: 4px;
+            padding: 15px 20px;
+            margin: 20px 0;
+        }
+        
+        .wpmcp-settings-section h2 {
+            margin-top: 0;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #eee;
+        }
+        
+        .wpmcp-code-example {
+            background: #f9f9f9;
+            border: 1px solid #e5e5e5;
+            border-radius: 4px;
+            padding: 15px;
+            margin: 15px 0;
+        }
+        
+        .wpmcp-code-example pre {
+            margin: 0;
+            padding: 10px;
+            overflow-x: auto;
+            background: #f1f1f1;
+            border-radius: 3px;
+        }
+        
+        .wpmcp-status {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        
+        .wpmcp-status-success {
+            background: #edfaef;
+            color: #00a32a;
+        }
+        
+        .wpmcp-status-error {
+            background: #ffecec;
+            color: #d63638;
+        }
+        
+        .wpmcp-status-pending {
+            background: #fef8ee;
+            color: #bd8600;
+        }
+        
+        .wpmcp-footer {
+            margin-top: 30px;
+            padding-top: 10px;
+            border-top: 1px solid #eee;
+            color: #666;
+            font-size: 12px;
+        }
+    </style>
 
-<script>
-    jQuery(document).ready(function($) {
-        // Tab navigation
-        $('.nav-tab').on('click', function(e) {
-            e.preventDefault();
-            
-            // Hide all tab content
-            $('.tab-content').removeClass('active');
-            
-            // Remove active class from all tabs
-            $('.nav-tab').removeClass('nav-tab-active');
-            
-            // Add active class to clicked tab
-            $(this).addClass('nav-tab-active');
-            
-            // Show corresponding tab content
-            const tabId = $(this).attr('href');
-            $(tabId).addClass('active');
-        });
-        
-        // Test API connection
-        $('#test-api-connection').on('click', function() {
-            const apiKey = $('input[name="wpmcp_api_key"]').val();
-            
-            if (!apiKey) {
-                $('#api-connection-result').html('<span style="color: red;">API key is required</span>');
-                return;
-            }
-            
-            $('#api-connection-result').html('<span style="color: blue;">Testing connection...</span>');
-            
-            $.ajax({
-                url: ajaxurl,
-                type: 'POST',
-                data: {
-                    action: 'wpmcp_test_api_connection',
-                    nonce: wpmcp_admin_data.nonce
-                },
-                success: function(response) {
-                    if (response.success) {
-                        $('#api-connection-result').html('<span style="color: green;">✓ ' + response.data + '</span>');
-                    } else {
-                        $('#api-connection-result').html('<span style="color: red;">✗ ' + response.data + '</span>');
-                    }
-                },
-                error: function() {
-                    $('#api-connection-result').html('<span style="color: red;">✗ Connection failed</span>');
+    <script>
+        jQuery(document).ready(function($) {
+            // Test API connection
+            $('#test-api-connection').on('click', function() {
+                const apiKey = $('input[name="wpmcp_api_key"]').val();
+                if (!apiKey) {
+                    $('#api-connection-result').html('<span style="color: red;">Please enter an API key first</span>');
+                    return;
                 }
-            });
-        });
-        
-        // View consent logs
-        $('#view-consent-logs').on('click', function() {
-            $.ajax({
-                url: ajaxurl,
-                type: 'POST',
-                data: {
-                    action: 'wpmcp_view_consent_logs',
-                    nonce: wpmcp_admin_data.nonce
-                },
-                success: function(response) {
-                    if (response.success) {
-                        const logs = response.data;
-                        let html = '';
-                        
-                        if (logs.length === 0) {
-                            html = '<tr><td colspan="5">No consent logs found.</td></tr>';
-                        } else {
-                            logs.forEach(function(log) {
-                                html += '<tr>';
-                                html += '<td>' + log.timestamp + '</td>';
-                                html += '<td>' + log.user + '</td>';
-                                html += '<td>' + log.tool + '</td>';
-                                html += '<td><pre>' + JSON.stringify(log.arguments, null, 2) + '</pre></td>';
-                                html += '<td>' + (log.granted ? '<span style="color: green;">Granted</span>' : '<span style="color: red;">Denied</span>') + '</td>';
-                                html += '</tr>';
-                            });
-                        }
-                        
-                        $('#consent-logs-body').html(html);
-                        $('#consent-logs-table').show();
-                    } else {
-                        alert('Error: ' + response.data);
-                    }
-                },
-                error: function() {
-                    alert('Failed to load consent logs');
-                }
-            });
-        });
-        
-        // Clear consent logs
-        $('#clear-consent-logs').on('click', function() {
-            if (confirm('Are you sure you want to clear all consent logs?')) {
-                $.ajax({
-                    url: ajaxurl,
-                    type: 'POST',
-                    data: {
-                        action: 'wpmcp_clear_consent_logs',
-                        nonce: wpmcp_admin_data.nonce
-                    },
-                    success: function(response) {
-                        if (response.success) {
-                            $('#consent-logs-body').html('<tr><td colspan="5">No consent logs found.</td></tr>');
-                            alert('Consent logs cleared successfully');
-                        } else {
-                            alert('Error: ' + response.data);
-                        }
-                    },
-                    error: function() {
-                        alert('Failed to clear consent logs');
-                    }
-                });
-            }
-        });
-        
-        // Unsubscribe resource
-        $(document).on('click', '.unsubscribe-resource', function() {
-            if (confirm('Are you sure you want to unsubscribe from this resource?')) {
-                const uri = $(this).data('uri');
-                const $row = $(this).closest('tr');
+                
+                $('#api-connection-result').html('<span style="color: blue;">Testing connection...</span>');
                 
                 $.ajax({
-                    url: ajaxurl,
-                    type: 'POST',
-                    data: {
-                        action: 'wpmcp_unsubscribe_resource',
-                        nonce: wpmcp_admin_data.nonce,
-                        uri: uri
+                    url: '<?php echo esc_url(rest_url('wpmcp/v1/data')); ?>',
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
                     },
+                    data: JSON.stringify({
+                        type: 'invoke',
+                        name: 'wp_discover_endpoints',
+                        arguments: {},
+                        api_key: apiKey  // Send API key in the request body
+                    }),
                     success: function(response) {
-                        if (response.success) {
-                            $row.remove();
-                            if ($('#resource-subscriptions-container tbody tr').length === 0) {
-                                $('#resource-subscriptions-container').html('<p>No active resource subscriptions.</p>');
-                            }
+                        if (response.type === 'success') {
+                            const endpointCount = Array.isArray(response.data) ? response.data.length : 0;
+                            $('#api-connection-result').html('<span style="color: green;">Connection successful! Discovered ' + endpointCount + ' endpoints.</span>');
                         } else {
-                            alert('Error: ' + response.data);
+                            $('#api-connection-result').html('<span style="color: red;">Connection failed: Invalid response format</span>');
                         }
                     },
-                    error: function() {
-                        alert('Failed to unsubscribe from resource');
+                    error: function(xhr) {
+                        $('#api-connection-result').html('<span style="color: red;">Connection failed: ' + (xhr.responseJSON?.message || 'Unknown error') + '</span>');
                     }
                 });
-            }
-        });
-        
-        // Clear notification
-        $(document).on('click', '.clear-notification', function() {
-            const index = $(this).data('index');
-            const $row = $(this).closest('tr');
+            });
             
-            $.ajax({
-                url: ajaxurl,
-                type: 'POST',
-                data: {
-                    action: 'wpmcp_clear_notification',
-                    nonce: wpmcp_admin_data.nonce,
-                    index: index
-                },
-                success: function(response) {
-                    if (response.success) {
-                        $row.remove();
-                        if ($('#resource-notifications-container tbody tr').length === 0) {
-                            $('#resource-notifications-container').html('<p>No pending resource notifications.</p>');
-                        }
-                    } else {
-                        alert('Error: ' + response.data);
+            // Generate API key button
+            $('#generate-api-key').on('click', function() {
+                // Generate a random API key
+                const apiKey = Math.random().toString(36).substring(2, 15) + 
+                            Math.random().toString(36).substring(2, 15);
+                $('input[name="wpmcp_api_key"]').val(apiKey);
+            });
+            
+            // Prompt templates management
+            let promptTemplates = <?php echo json_encode($prompt_templates); ?>;
+            let editingPromptIndex = -1;
+            
+            // Show add prompt modal
+            $('#add-prompt-template').on('click', function() {
+                $('#prompt-modal-title').text('Add Prompt Template');
+                $('#prompt-name').val('');
+                $('#prompt-description').val('');
+                $('#prompt-content').val('');
+                $('#prompt-arguments-list').empty();
+                editingPromptIndex = -1;
+                $('#prompt-template-modal').show();
+            });
+            
+            // Close modal
+            $('#cancel-prompt').on('click', function() {
+                $('#prompt-template-modal').hide();
+            });
+            
+            // Add argument
+            $('#add-argument').on('click', function() {
+                const argIndex = $('#prompt-arguments-list').children().length;
+                const argHtml = `
+                    <div class="prompt-argument" data-index="${argIndex}">
+                        <p>
+                            <input type="text" class="arg-name" placeholder="Argument name" style="width: 200px;">
+                            <input type="text" class="arg-description" placeholder="Description" style="width: 200px;">
+                            <label>
+                                <input type="checkbox" class="arg-required"> Required
+                            </label>
+                            <button type="button" class="button button-small remove-argument">Remove</button>
+                        </p>
+                    </div>
+                `;
+                $('#prompt-arguments-list').append(argHtml);
+            });
+            
+            // Remove argument
+            $(document).on('click', '.remove-argument', function() {
+                $(this).closest('.prompt-argument').remove();
+            });
+            
+            // Save prompt template
+            $('#save-prompt').on('click', function() {
+                const name = $('#prompt-name').val().trim();
+                const description = $('#prompt-description').val().trim();
+                const content = $('#prompt-content').val().trim();
+                
+                if (!name || !content) {
+                    alert('Name and content are required');
+                    return;
+                }
+                
+                // Collect arguments
+                const arguments = [];
+                $('.prompt-argument').each(function() {
+                    const argName = $(this).find('.arg-name').val().trim();
+                    const argDescription = $(this).find('.arg-description').val().trim();
+                    const argRequired = $(this).find('.arg-required').is(':checked');
+                    
+                    if (argName) {
+                        arguments.push({
+                            name: argName,
+                            description: argDescription,
+                            required: argRequired
+                        });
                     }
-                },
-                error: function() {
-                    alert('Failed to clear notification');
+                });
+                
+                const template = {
+                    name: name,
+                    description: description,
+                    content: content,
+                    arguments: arguments
+                };
+                
+                if (editingPromptIndex >= 0) {
+                    // Update existing template
+                    promptTemplates[editingPromptIndex] = template;
+                } else {
+                    // Add new template
+                    promptTemplates.push(template);
+                }
+                
+                // Update hidden field
+                $('#wpmcp-prompt-templates-json').val(JSON.stringify(promptTemplates));
+                
+                // Close modal and reload page to show updated templates
+                $('#prompt-template-modal').hide();
+                location.reload();
+            });
+            
+            // Edit prompt
+            $(document).on('click', '.edit-prompt', function() {
+                const promptName = $(this).data('name');
+                const promptIndex = promptTemplates.findIndex(t => t.name === promptName);
+                
+                if (promptIndex >= 0) {
+                    const template = promptTemplates[promptIndex];
+                    editingPromptIndex = promptIndex;
+                    
+                    $('#prompt-modal-title').text('Edit Prompt Template');
+                    $('#prompt-name').val(template.name);
+                    $('#prompt-description').val(template.description);
+                    $('#prompt-content').val(template.content);
+                    
+                    // Add arguments
+                    $('#prompt-arguments-list').empty();
+                    if (template.arguments && template.arguments.length > 0) {
+                        template.arguments.forEach((arg, index) => {
+                            const argHtml = `
+                                <div class="prompt-argument" data-index="${index}">
+                                    <p>
+                                        <input type="text" class="arg-name" placeholder="Argument name" value="${arg.name}" style="width: 200px;">
+                                        <input type="text" class="arg-description" placeholder="Description" value="${arg.description || ''}" style="width: 200px;">
+                                        <label>
+                                            <input type="checkbox" class="arg-required" ${arg.required ? 'checked' : ''}> Required
+                                        </label>
+                                        <button type="button" class="button button-small remove-argument">Remove</button>
+                                    </p>
+                                </div>
+                            `;
+                            $('#prompt-arguments-list').append(argHtml);
+                        });
+                    }
+                    
+                    $('#prompt-template-modal').show();
+                }
+            });
+            
+            // Delete prompt
+            $(document).on('click', '.delete-prompt', function() {
+                if (confirm('Are you sure you want to delete this prompt template?')) {
+                    const promptName = $(this).data('name');
+                    const promptIndex = promptTemplates.findIndex(t => t.name === promptName);
+                    
+                    if (promptIndex >= 0) {
+                        promptTemplates.splice(promptIndex, 1);
+                        $('#wpmcp-prompt-templates-json').val(JSON.stringify(promptTemplates));
+                        location.reload();
+                    }
+                }
+            });
+            
+            // View consent logs
+            $('#view-consent-logs').on('click', function() {
+                $('#consent-logs-table').toggle();
+                
+                if ($('#consent-logs-table').is(':visible')) {
+                    // In a real implementation, this would fetch logs from the server
+                    // For now, we'll just show sample data
+                    const sampleLogs = [
+                        {
+                            time: '2023-04-28 10:15:22',
+                            user: 'admin',
+                            tool: 'wp_call_endpoint',
+                            arguments: JSON.stringify({
+                                endpoint: '/wp/v2/posts',
+                                method: 'POST',
+                                params: {
+                                    title: 'New Post',
+                                    content: 'Post content',
+                                    status: 'draft'
+                                }
+                            }),
+                            status: 'approved'
+                        },
+                        {
+                            time: '2023-04-27 15:30:45',
+                            user: 'editor',
+                            tool: 'wp_call_endpoint',
+                            arguments: JSON.stringify({
+                                endpoint: '/wp/v2/comments/123',
+                                method: 'DELETE'
+                            }),
+                            status: 'denied'
+                        }
+                    ];
+                    
+                    let logsHtml = '';
+                    sampleLogs.forEach(log => {
+                        logsHtml += `
+                            <tr>
+                                <td>${log.time}</td>
+                                <td>${log.user}</td>
+                                <td>${log.tool}</td>
+                                <td><pre style="margin: 0; max-height: 100px; overflow-y: auto;">${log.arguments}</pre></td>
+                                <td>
+                                    <span class="wpmcp-status wpmcp-status-${log.status === 'approved' ? 'success' : 'error'}">
+                                        ${log.status}
+                                    </span>
+                                </td>
+                            </tr>
+                        `;
+                    });
+                    
+                    $('#consent-logs-body').html(logsHtml);
+                }
+            });
+            
+            // Clear consent logs
+            $('#clear-consent-logs').on('click', function() {
+                if (confirm('Are you sure you want to clear all consent logs? This action cannot be undone.')) {
+                    // In a real implementation, this would clear logs on the server
+                    $('#consent-logs-body').html('<tr><td colspan="5">No logs available</td></tr>');
+                    alert('Logs cleared successfully');
+                }
+            });
+            
+            // Unsubscribe from resource
+            $(document).on('click', '.unsubscribe-resource', function() {
+                if (confirm('Are you sure you want to unsubscribe from this resource?')) {
+                    const uri = $(this).data('uri');
+                    // In a real implementation, this would unsubscribe on the server
+                    $(this).closest('tr').remove();
+                    alert('Unsubscribed from resource: ' + uri);
                 }
             });
         });
-        
-        // Clear all notifications
-        $('#clear-all-notifications').on('click', function() {
-            if (confirm('Are you sure you want to clear all notifications?')) {
-                $.ajax({
-                    url: ajaxurl,
-                    type: 'POST',
-                    data: {
-                        action: 'wpmcp_clear_all_notifications',
-                        nonce: wpmcp_admin_data.nonce
-                    },
-                    success: function(response) {
-                        if (response.success) {
-                            $('#resource-notifications-container').html('<p>No pending resource notifications.</p>');
-                        } else {
-                            alert('Error: ' + response.data);
-                        }
-                    },
-                    error: function() {
-                        alert('Failed to clear notifications');
-                    }
-                });
-            }
-        });
-    });
-</script>
+    </script>
