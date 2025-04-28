@@ -457,6 +457,14 @@ curl -X POST https://your-site.com/wp-json/wpmcp/v1/data \
 - Monitor consent logs for suspicious activity
 - Keep the plugin updated to receive security patches
 
+## Changelog
+
+A complete list of changes is maintained in the [CHANGELOG.md](CHANGELOG.md) file.
+
+Recent changes:
+- **Version 2.0.0**: Full implementation of the Model Context Protocol standard
+- **Version 1.0.0**: Initial release with basic WordPress REST API integration
+
 ## License
 
 This project is licensed under the GNU General Public License v3.0 (GPL-3.0).
