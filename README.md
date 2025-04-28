@@ -1,6 +1,7 @@
 # WordPress Model Context Protocol (WPMCP)
 
 WPMCP is a WordPress plugin that implements the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) standard, enabling AI assistants to interact with WordPress sites through a standardized interface.
+This is a basic implementation and Version 2 has a much more robust implementation that is aligned with the MCP specifications.
 
 ## Overview
 
