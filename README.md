@@ -2,6 +2,44 @@
 
 WPMCP is a WordPress plugin that implements the [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) standard, enabling AI assistants to interact with WordPress sites through a standardized interface.
 
+**Version:** 2.0.0  
+**Author:** Dr. Robert Li
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Features](#features)
+- [Installation](#installation)
+  - [WordPress Plugin Installation](#wordpress-plugin-installation)
+- [Configuration](#configuration)
+  - [WordPress Plugin Configuration](#wordpress-plugin-configuration)
+- [Functionality](#functionality)
+  - [Core MCP Features](#core-mcp-features)
+  - [WordPress API Integration](#wordpress-api-integration)
+  - [Resource Management](#resource-management)
+  - [Prompt Templates](#prompt-templates)
+  - [User Consent System](#user-consent-system)
+- [Configuring MCP Clients](#configuring-mcp-clients)
+  - [Using the Configuration File](#using-the-configuration-file)
+  - [Configuration for Different MCP Clients](#configuration-for-different-mcp-clients)
+- [Usage Examples](#usage-examples)
+  - [Content Management](#content-management)
+  - [User and Comment Management](#user-and-comment-management)
+  - [Site Configuration](#site-configuration)
+  - [Resource Operations](#resource-operations)
+  - [Using Prompt Templates](#using-prompt-templates)
+- [Direct API Usage](#direct-api-usage)
+  - [Discover Endpoints](#discover-endpoints)
+  - [Call an Endpoint](#call-an-endpoint)
+  - [List Resources](#list-resources)
+  - [Read a Resource](#read-a-resource)
+  - [Subscribe to Resource Changes](#subscribe-to-resource-changes)
+  - [List Prompt Templates](#list-prompt-templates)
+  - [Get a Prompt Template](#get-a-prompt-template)
+- [Security Considerations](#security-considerations)
+- [License](#license)
+- [Support](#support)
+
 ## Overview
 
 WPMCP turns your WordPress site into an MCP server, allowing AI assistants and other MCP clients to:
@@ -9,6 +47,9 @@ WPMCP turns your WordPress site into an MCP server, allowing AI assistants and o
 - Discover available WordPress REST API endpoints
 - Execute REST API requests with proper authentication
 - Manage content, users, and site settings through natural language
+- Access WordPress resources with a standardized interface
+- Use prompt templates for common operations
+- Receive notifications about resource changes
 
 ## Features
 
@@ -19,6 +60,11 @@ WPMCP turns your WordPress site into an MCP server, allowing AI assistants and o
 - **Flexible Operations**: Support for GET, POST, PUT, DELETE, and PATCH methods
 - **Granular Permissions**: Control which WordPress resources can be accessed
 - **Self-Describing API**: Includes comprehensive descriptions and examples
+- **Resource Management**: Access WordPress content as MCP resources
+- **Prompt Templates**: Pre-defined templates for common operations
+- **User Consent System**: Requires user approval for data-modifying operations
+- **Real-time Notifications**: Subscribe to resource changes
+- **Pagination Support**: Handle large resource collections efficiently
 
 ## Installation
 
@@ -52,15 +98,27 @@ Alternatively, you can install manually:
    - Plugins
    - Themes
    - Settings
-4. Save your settings
+4. Configure user consent settings for data-modifying operations
+5. Save your settings
 
 The plugin settings page also displays your MCP endpoint URL, which you'll need when configuring MCP clients.
 
 ## Functionality
 
-WPMCP provides two main functions through the MCP protocol:
+### Core MCP Features
 
-### 1. Discover Endpoints (`wp_discover_endpoints`)
+WPMCP implements the following core MCP features:
+
+1. **Tools**: Executable functions that can be invoked by AI assistants
+2. **Resources**: WordPress content exposed as MCP resources
+3. **Prompts**: Pre-defined templates for common operations
+4. **Notifications**: Real-time updates for resource changes
+
+### WordPress API Integration
+
+The plugin provides two main functions for WordPress API integration:
+
+#### 1. Discover Endpoints (`wp_discover_endpoints`)
 
 This function maps all available REST API endpoints on your WordPress site and returns their methods and namespaces. It allows AI assistants to understand what operations are possible without having to manually specify endpoints.
 
@@ -84,7 +142,7 @@ This function maps all available REST API endpoints on your WordPress site and r
 }
 ```
 
-### 2. Call Endpoint (`wp_call_endpoint`)
+#### 2. Call Endpoint (`wp_call_endpoint`)
 
 This function executes specific REST API requests to the WordPress site using provided parameters. It handles both read and write operations to manage content, users, and site settings.
 
@@ -110,22 +168,55 @@ This function executes specific REST API requests to the WordPress site using pr
 }
 ```
 
-**Example (Create Post):**
-```json
-{
-  "type": "invoke",
-  "name": "wp_call_endpoint",
-  "arguments": {
-    "endpoint": "/wp/v2/posts",
-    "method": "POST",
-    "params": {
-      "title": "Example Post Title",
-      "content": "This is the content of the post.",
-      "status": "draft"
-    }
-  }
-}
-```
+### Resource Management
+
+WPMCP exposes WordPress content as MCP resources with the following operations:
+
+#### 1. List Resources (`resources/list`)
+
+Lists available WordPress resources that can be accessed.
+
+**Parameters:**
+- `cursor` (optional): Pagination cursor for retrieving the next page of results
+
+#### 2. Read Resource (`resources/read`)
+
+Reads the content of a specific WordPress resource.
+
+**Parameters:**
+- `uri` (required): URI of the resource to read (e.g., "wp://posts/123")
+
+#### 3. Subscribe to Resource Changes (`resources/subscribe`)
+
+Subscribes to changes for a specific WordPress resource.
+
+**Parameters:**
+- `uri` (required): URI of the resource to subscribe to
+
+### Prompt Templates
+
+WPMCP provides pre-defined prompt templates for common operations:
+
+#### 1. List Prompt Templates (`prompts/list`)
+
+Lists available prompt templates that can be used for content generation.
+
+#### 2. Get Prompt Template (`prompts/get`)
+
+Gets a specific prompt template with messages.
+
+**Parameters:**
+- `name` (required): Name of the prompt template
+- `arguments` (optional): Arguments for the prompt template
+
+### User Consent System
+
+For data-modifying operations, WPMCP includes a user consent system:
+
+1. When an AI assistant attempts to modify data, a consent request is generated
+2. The site owner receives a notification with details about the requested operation
+3. The operation proceeds only after explicit approval
+4. All consent decisions are logged for security
 
 ## Configuring MCP Clients
 
@@ -195,7 +286,8 @@ When using the Anthropic API directly with tool use:
         },
         "required": ["endpoint"]
       }
-    }
+    },
+    // ... additional tools for resources and prompts
   ]
 }
 ```
@@ -229,6 +321,25 @@ What plugins are currently active on my site?
 ```
 ```
 Check if any themes need updates
+```
+
+### Resource Operations
+```
+List all available resources on my WordPress site
+```
+```
+Read the content of my about page
+```
+```
+Subscribe to changes on my homepage
+```
+
+### Using Prompt Templates
+```
+Use the SEO optimization prompt for my latest post
+```
+```
+Generate a product description using the product template
 ```
 
 ## Direct API Usage
@@ -265,13 +376,86 @@ curl -X POST https://your-site.com/wp-json/wpmcp/v1/data \
   }'
 ```
 
+### List Resources
+```bash
+curl -X POST https://your-site.com/wp-json/wpmcp/v1/data \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key" \
+  -d '{
+    "type": "invoke",
+    "name": "resources/list",
+    "arguments": {}
+  }'
+```
+
+### Read a Resource
+```bash
+curl -X POST https://your-site.com/wp-json/wpmcp/v1/data \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key" \
+  -d '{
+    "type": "invoke",
+    "name": "resources/read",
+    "arguments": {
+      "uri": "wp://posts/1"
+    }
+  }'
+```
+
+### Subscribe to Resource Changes
+```bash
+curl -X POST https://your-site.com/wp-json/wpmcp/v1/data \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key" \
+  -d '{
+    "type": "invoke",
+    "name": "resources/subscribe",
+    "arguments": {
+      "uri": "wp://posts/1"
+    }
+  }'
+```
+
+### List Prompt Templates
+```bash
+curl -X POST https://your-site.com/wp-json/wpmcp/v1/data \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key" \
+  -d '{
+    "type": "invoke",
+    "name": "prompts/list",
+    "arguments": {}
+  }'
+```
+
+### Get a Prompt Template
+```bash
+curl -X POST https://your-site.com/wp-json/wpmcp/v1/data \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: your-api-key" \
+  -d '{
+    "type": "invoke",
+    "name": "prompts/get",
+    "arguments": {
+      "name": "create_post",
+      "arguments": {
+        "title": "My New Post",
+        "content": "This is the content of my new post."
+      }
+    }
+  }'
+```
+
 ## Security Considerations
 
 - Keep your API key secure and never commit it to version control
 - Use HTTPS for all WordPress sites
 - Regularly rotate API keys
 - Be selective about which WordPress resources you allow access to
+- Enable user consent for data-modifying operations
 - Follow the principle of least privilege when assigning user roles
+- Monitor consent logs for suspicious activity
+- Keep the plugin updated to receive security patches
 
 ## License
 

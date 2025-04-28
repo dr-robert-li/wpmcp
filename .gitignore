@@ -12,9 +12,12 @@ desktop.ini
 .settings/
 *.swp
 *.swo
+*.code-workspace
 
 # (excluding server sub-component)
 server/
+mcp-servers-main/
+mcp-specs/
 
 # WordPress Plugin Files to Ignore
 /wpmcp/vendor/

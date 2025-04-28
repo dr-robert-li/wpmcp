@@ -1,112 +1,245 @@
 {
-    "name": "wpmcp",
-    "displayName": "WordPress MCP Integration",
-    "version": "1.0.0",
-    "description": "Model Context Protocol integration for WordPress websites",
-    "tools": [
-      {
-        "name": "wp_discover_endpoints",
-        "displayName": "WordPress Discover Endpoints",
-        "description": "Maps all available REST API endpoints on a WordPress site and returns their methods and namespaces. This allows you to understand what operations are possible without having to manually specify endpoints.",
-        "schema": {
-          "type": "object",
-          "properties": {},
-          "required": []
-        },
-        "server": {
-          "url": "https://your-wordpress-site.com/wp-json/wpmcp/v1/data",
-          "headers": {
-            "x-api-key": "YOUR_API_KEY_HERE"
-          }
-        }
+  "name": "wpmcp",
+  "displayName": "WordPress MCP Integration",
+  "version": "2.0.0",
+  "description": "Model Context Protocol integration for WordPress websites",
+  "tools": [
+    {
+      "name": "wp_discover_endpoints",
+      "displayName": "WordPress Discover Endpoints",
+      "description": "Maps all available REST API endpoints on a WordPress site and returns their methods and namespaces. This allows you to understand what operations are possible without having to manually specify endpoints.",
+      "schema": {
+        "type": "object",
+        "properties": {},
+        "required": []
       },
-      {
-        "name": "wp_call_endpoint",
-        "displayName": "WordPress Call Endpoint",
-        "description": "Executes specific REST API requests to the WordPress site using provided parameters. It handles both read and write operations to manage content, users, and site settings.",
-        "schema": {
-          "type": "object",
-          "properties": {
-            "endpoint": {
-              "type": "string",
-              "description": "API endpoint path (e.g., /wp/v2/posts)"
-            },
-            "method": {
-              "type": "string",
-              "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"],
-              "description": "HTTP method",
-              "default": "GET"
-            },
-            "params": {
-              "type": "object",
-              "description": "Request parameters or body data"
-            }
+      "server": {
+        "url": "https://your-wordpress-site.com/wp-json/wpmcp/v1/data",
+        "headers": {
+          "x-api-key": "YOUR_API_KEY_HERE"
+        }
+      }
+    },
+    {
+      "name": "wp_call_endpoint",
+      "displayName": "WordPress Call Endpoint",
+      "description": "Executes specific REST API requests to the WordPress site using provided parameters. It handles both read and write operations to manage content, users, and site settings.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "endpoint": {
+            "type": "string",
+            "description": "API endpoint path (e.g., /wp/v2/posts)"
           },
-          "required": ["endpoint"]
+          "method": {
+            "type": "string",
+            "enum": ["GET", "POST", "PUT", "DELETE", "PATCH"],
+            "description": "HTTP method",
+            "default": "GET"
+          },
+          "params": {
+            "type": "object",
+            "description": "Request parameters or body data"
+          }
         },
-        "server": {
-          "url": "https://your-wordpress-site.com/wp-json/wpmcp/v1/data",
-          "headers": {
-            "x-api-key": "YOUR_API_KEY_HERE"
-          }
+        "required": ["endpoint"]
+      },
+      "server": {
+        "url": "https://your-wordpress-site.com/wp-json/wpmcp/v1/data",
+        "headers": {
+          "x-api-key": "YOUR_API_KEY_HERE"
         }
       }
-    ],
-    "examples": [
-      {
-        "name": "List recent posts",
-        "tool": "wp_call_endpoint",
-        "args": {
-          "endpoint": "/wp/v2/posts",
-          "method": "GET",
-          "params": {
-            "per_page": 5,
-            "orderby": "date",
-            "order": "desc"
+    },
+    {
+      "name": "resources/list",
+      "displayName": "List WordPress Resources",
+      "description": "Lists available WordPress resources that can be accessed.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "cursor": {
+            "type": "string",
+            "description": "Pagination cursor for retrieving next page of results"
           }
-        }
+        },
+        "required": []
       },
-      {
-        "name": "Create a new post",
-        "tool": "wp_call_endpoint",
-        "args": {
-          "endpoint": "/wp/v2/posts",
-          "method": "POST",
-          "params": {
-            "title": "Example Post Title",
-            "content": "This is the content of the post.",
-            "status": "draft"
-          }
-        }
-      },
-      {
-        "name": "Get categories",
-        "tool": "wp_call_endpoint",
-        "args": {
-          "endpoint": "/wp/v2/categories",
-          "method": "GET"
-        }
-      },
-      {
-        "name": "Update a post",
-        "tool": "wp_call_endpoint",
-        "args": {
-          "endpoint": "/wp/v2/posts/123",
-          "method": "PUT",
-          "params": {
-            "title": "Updated Title",
-            "content": "Updated content for this post."
-          }
-        }
-      },
-      {
-        "name": "Get site info",
-        "tool": "wp_call_endpoint",
-        "args": {
-          "endpoint": "/",
-          "method": "GET"
+      "server": {
+        "url": "https://your-wordpress-site.com/wp-json/wpmcp/v1/data",
+        "headers": {
+          "x-api-key": "YOUR_API_KEY_HERE"
         }
       }
-    ]
-  }
-  
+    },
+    {
+      "name": "resources/read",
+      "displayName": "Read WordPress Resource",
+      "description": "Reads the content of a specific WordPress resource.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "uri": {
+            "type": "string",
+            "description": "URI of the resource to read (e.g., wp://posts/123)"
+          }
+        },
+        "required": ["uri"]
+      },
+      "server": {
+        "url": "https://your-wordpress-site.com/wp-json/wpmcp/v1/data",
+        "headers": {
+          "x-api-key": "YOUR_API_KEY_HERE"
+        }
+      }
+    },
+    {
+      "name": "resources/subscribe",
+      "displayName": "Subscribe to Resource Changes",
+      "description": "Subscribes to changes for a specific WordPress resource.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "uri": {
+            "type": "string",
+            "description": "URI of the resource to subscribe to"
+          }
+        },
+        "required": ["uri"]
+      },
+      "server": {
+        "url": "https://your-wordpress-site.com/wp-json/wpmcp/v1/data",
+        "headers": {
+          "x-api-key": "YOUR_API_KEY_HERE"
+        }
+      }
+    },
+    {
+      "name": "prompts/list",
+      "displayName": "List Prompt Templates",
+      "description": "Lists available prompt templates that can be used for content generation.",
+      "schema": {
+        "type": "object",
+        "properties": {},
+        "required": []
+      },
+      "server": {
+        "url": "https://your-wordpress-site.com/wp-json/wpmcp/v1/data",
+        "headers": {
+          "x-api-key": "YOUR_API_KEY_HERE"
+        }
+      }
+    },
+    {
+      "name": "prompts/get",
+      "displayName": "Get Prompt Template",
+      "description": "Gets a specific prompt template with messages.",
+      "schema": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string",
+            "description": "Name of the prompt template"
+          },
+          "arguments": {
+            "type": "object",
+            "description": "Arguments for the prompt template"
+          }
+        },
+        "required": ["name"]
+      },
+      "server": {
+        "url": "https://your-wordpress-site.com/wp-json/wpmcp/v1/data",
+        "headers": {
+          "x-api-key": "YOUR_API_KEY_HERE"
+        }
+      }
+    }
+  ],
+  "examples": [
+    {
+      "name": "List recent posts",
+      "tool": "wp_call_endpoint",
+      "args": {
+        "endpoint": "/wp/v2/posts",
+        "method": "GET",
+        "params": {
+          "per_page": 5,
+          "orderby": "date",
+          "order": "desc"
+        }
+      }
+    },
+    {
+      "name": "Create a new post",
+      "tool": "wp_call_endpoint",
+      "args": {
+        "endpoint": "/wp/v2/posts",
+        "method": "POST",
+        "params": {
+          "title": "Example Post Title",
+          "content": "This is the content of the post.",
+          "status": "draft"
+        }
+      }
+    },
+    {
+      "name": "Get categories",
+      "tool": "wp_call_endpoint",
+      "args": {
+        "endpoint": "/wp/v2/categories",
+        "method": "GET"
+      }
+    },
+    {
+      "name": "Update a post",
+      "tool": "wp_call_endpoint",
+      "args": {
+        "endpoint": "/wp/v2/posts/123",
+        "method": "PUT",
+        "params": {
+          "title": "Updated Title",
+          "content": "Updated content for this post."
+        }
+      }
+    },
+    {
+      "name": "Get site info",
+      "tool": "wp_call_endpoint",
+      "args": {
+        "endpoint": "/",
+        "method": "GET"
+      }
+    },
+    {
+      "name": "Read a post resource",
+      "tool": "resources/read",
+      "args": {
+        "uri": "wp://posts/1"
+      }
+    },
+    {
+      "name": "Subscribe to post changes",
+      "tool": "resources/subscribe",
+      "args": {
+        "uri": "wp://posts/1"
+      }
+    },
+    {
+      "name": "List available resources",
+      "tool": "resources/list",
+      "args": {}
+    },
+    {
+      "name": "Get SEO optimization prompt",
+      "tool": "prompts/get",
+      "args": {
+        "name": "seo_optimize",
+        "arguments": {
+          "content": "This is the content to optimize for SEO.",
+          "keywords": "wordpress, mcp, ai"
+        }
+      }
+    }
+  ]
+}
