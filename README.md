@@ -509,6 +509,7 @@ curl -X POST http://your-site.com/wp-json/wpmcp/v1/mcp -H "Content-Type: applica
 - Basic MCP implementation
 - WordPress REST API integration
 - API key authentication
+
 ## License
 
 This project is licensed under the GNU General Public License v3.0 (GPL-3.0).
