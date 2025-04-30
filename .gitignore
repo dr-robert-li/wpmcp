@@ -25,6 +25,9 @@ server/
 mcp-specs/
 mcp-servers-main/
 
+# WP Plugin Reference
+wp-boilerplate/
+
 # Environment Files
 .env
 .env.local

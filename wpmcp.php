@@ -2,8 +2,8 @@
 /**
  * Plugin Name: WPMCP
  * Plugin URI: https://github.com/dr-robert-li/wpmcp
- * Description: WordPress Model Context Protocol (MCP) - Enables AI assistants to interact with WordPress through REST API
- * Version: 1.0.0
+ * Description: WordPress Model Context Protocol (MCP) - Enables AI assistants to interact with WordPress through MCP protocol
+ * Version: 1.1.0
  * Author: Dr. Robert Li
  * License: GPL v3
  */
@@ -12,8 +12,22 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+// Define plugin constants
+define('WPMCP_VERSION', '1.1.0');
+define('WPMCP_PLUGIN_DIR', plugin_dir_path(__FILE__));
+define('WPMCP_PLUGIN_URL', plugin_dir_url(__FILE__));
+
+// Include required files
+require_once WPMCP_PLUGIN_DIR . 'includes/class-wpmcp-transport.php';
+require_once WPMCP_PLUGIN_DIR . 'includes/class-wpmcp-tools.php';
+require_once WPMCP_PLUGIN_DIR . 'includes/class-wpmcp-resources.php';
+
 class WPMCP_Plugin {
     private $api_key = '';
+    private $implementation = array(
+        'name' => 'wpmcp',
+        'version' => '1.1.0'
+    );
     
     public function __construct() {
         add_action('admin_menu', array($this, 'add_admin_menu'));
@@ -22,6 +36,11 @@ class WPMCP_Plugin {
         
         // Load API key from options
         $this->api_key = get_option('wpmcp_api_key', '');
+        
+        // Create includes directory if it doesn't exist
+        if (!file_exists(WPMCP_PLUGIN_DIR . 'includes')) {
+            mkdir(WPMCP_PLUGIN_DIR . 'includes', 0755);
+        }
     }
 
     public function add_admin_menu() {
@@ -46,13 +65,19 @@ class WPMCP_Plugin {
             'type' => 'array',
             'default' => array('posts', 'pages', 'categories', 'tags', 'comments', 'users')
         ));
+        
+        // Add transport settings
+        register_setting('wpmcp_settings', 'wpmcp_transport', array(
+            'type' => 'string',
+            'default' => 'http'
+        ));
     }
 
     public function settings_page() {
         ?>
         <div class="wrap">
             <h2>WordPress Model Context Protocol (MCP) Settings</h2>
-            <p>This plugin enables AI assistants to interact with your WordPress site through the REST API.</p>
+            <p>This plugin enables AI assistants to interact with your WordPress site through the MCP protocol.</p>
             
             <form method="post" action="options.php">
                 <?php
@@ -75,6 +100,16 @@ class WPMCP_Plugin {
                                     });
                                 </script>
                             <?php endif; ?>
+                        </td>
+                    </tr>
+                    <tr>
+                        <th scope="row">Transport</th>
+                        <td>
+                            <select name="wpmcp_transport">
+                                <option value="http" <?php selected(get_option('wpmcp_transport', 'http'), 'http'); ?>>HTTP</option>
+                                <option value="sse" <?php selected(get_option('wpmcp_transport', 'http'), 'sse'); ?>>Server-Sent Events (SSE)</option>
+                            </select>
+                            <p class="description">Transport protocol for MCP communication</p>
                         </td>
                     </tr>
                     <tr>
@@ -111,36 +146,59 @@ class WPMCP_Plugin {
             </form>
             
             <h3>Usage Information</h3>
-            <p>Endpoint URL: <code><?php echo esc_url(rest_url('wpmcp/v1/data')); ?></code></p>
+            <p>MCP Endpoint URL: <code><?php echo esc_url(rest_url('wpmcp/v1/mcp')); ?></code></p>
             <p>This plugin implements the Model Context Protocol (MCP) standard, allowing AI assistants to:</p>
             <ul style="list-style-type: disc; margin-left: 20px;">
-                <li>Discover available WordPress REST API endpoints</li>
+                <li>Discover available WordPress resources</li>
                 <li>Execute REST API requests with proper authentication</li>
                 <li>Manage content, users, and site settings through natural language</li>
+            </ul>
+            
+            <h3>MCP Protocol Information</h3>
+            <p>This plugin implements the MCP protocol version 2024-11-05 with the following features:</p>
+            <ul style="list-style-type: disc; margin-left: 20px;">
+                <li>JSON-RPC 2.0 message format</li>
+                <li>HTTP and SSE transport layers</li>
+                <li>Tool-based interaction model</li>
+                <li>Resource discovery and manipulation</li>
             </ul>
         </div>
         <?php
     }
 
     public function register_rest_routes() {
-        register_rest_route('wpmcp/v1', '/data', array(
+        register_rest_route('wpmcp/v1', '/mcp', array(
             'methods' => 'POST',
             'callback' => array($this, 'handle_mcp_request'),
             'permission_callback' => array($this, 'verify_api_key')
         ));
+        
+        // Register SSE endpoint if enabled
+        if (get_option('wpmcp_transport', 'http') === 'sse') {
+            register_rest_route('wpmcp/v1', '/mcp/sse', array(
+                'methods' => 'GET',
+                'callback' => array($this, 'handle_sse_connection'),
+                'permission_callback' => array($this, 'verify_api_key')
+            ));
+        }
     }
     
     public function verify_api_key($request) {
         $headers = $request->get_headers();
         
-        // Check for API key in headers (case-insensitive)
-        if (isset($headers['x-api-key']) && !empty($headers['x-api-key'][0])) {
-            return $headers['x-api-key'][0] === $this->api_key;
-        }
+        // Debug the headers to see what's actually coming in
+        error_log('WPMCP Debug - Headers: ' . print_r($headers, true));
         
-        // Also check for X-API-Key (capital letters)
-        if (isset($headers['x-api-key']) && !empty($headers['x-api-key'][0])) {
-            return $headers['x-api-key'][0] === $this->api_key;
+        // Check for API key in headers (try multiple possible header names)
+        $header_keys = ['x-api-key', 'x_api_key', 'http_x_api_key', 'http-x-api-key', 'X-API-KEY', 'X_API_KEY'];
+        
+        foreach ($header_keys as $key) {
+            if (isset($headers[$key]) && !empty($headers[$key][0])) {
+                error_log('WPMCP Debug - Found API key in header: ' . $key);
+                if ($headers[$key][0] === $this->api_key) {
+                    return true;
+                }
+            }
         }
         
         // Check for API key in request body as fallback
@@ -148,9 +206,11 @@ class WPMCP_Plugin {
         $data = json_decode($json_str, true);
         
         if (isset($data['api_key']) && $data['api_key'] === $this->api_key) {
+            error_log('WPMCP Debug - Found API key in request body');
             return true;
         }
         
+        error_log('WPMCP Debug - API key not found or does not match');
         return false;
     }    
 
@@ -159,280 +219,221 @@ class WPMCP_Plugin {
         $json_str = file_get_contents('php://input');
         $data = json_decode($json_str, true);
 
-        // Basic validation
-        if (!$data || !isset($data['type'])) {
-            return new WP_Error('invalid_request', 'Invalid request format', array('status' => 400));
+        // Basic validation for JSON-RPC 2.0
+        if (!$data || !isset($data['jsonrpc']) || $data['jsonrpc'] !== '2.0') {
+            return $this->create_jsonrpc_error(-32600, 'Invalid Request', null);
         }
 
-        // Handle different MCP request types
-        switch ($data['type']) {
-            case 'invoke':
-                return $this->handle_invoke($data);
-            case 'describe':
-                return $this->handle_describe();
+        // Handle notification (no id)
+        if (!isset($data['id'])) {
+            // Process notification (no response needed)
+            $this->process_notification($data);
+            return new WP_REST_Response(null, 204);
+        }
+
+        $id = $data['id'];
+        
+        // Validate method
+        if (!isset($data['method'])) {
+            return $this->create_jsonrpc_error(-32600, 'Invalid Request: method is required', $id);
+        }
+        
+        $method = $data['method'];
+        $params = isset($data['params']) ? $data['params'] : null;
+
+        // Handle different MCP methods
+        switch ($method) {
+            case 'initialize':
+                return $this->handle_initialize($id, $params);
+            case 'toolCall':
+                return $this->handle_tool_call($id, $params);
+            case 'describeTools':
+                return $this->handle_describe_tools($id);
+            case 'discoverResources':
+                return $this->handle_discover_resources($id);
+            case 'getResource':
+                return $this->handle_get_resource($id, $params);
             default:
-                return new WP_Error('invalid_type', 'Invalid request type', array('status' => 400));
+                return $this->create_jsonrpc_error(-32601, 'Method not found', $id);
         }
     }
 
-    private function handle_invoke($data) {
-        if (!isset($data['name']) || !isset($data['arguments'])) {
-            return new WP_Error('invalid_invoke', 'Invalid invoke request', array('status' => 400));
+    private function process_notification($data) {
+        // Handle notifications (no response required)
+        if (!isset($data['method'])) {
+            return;
         }
         
-        $tool_name = $data['name'];
-        $arguments = $data['arguments'];
+        $method = $data['method'];
+        $params = isset($data['params']) ? $data['params'] : null;
         
-        switch ($tool_name) {
-            case 'wp_discover_endpoints':
-                return $this->discover_endpoints();
-                
-            case 'wp_call_endpoint':
-                if (!isset($arguments['endpoint'])) {
-                    return new WP_Error('missing_endpoint', 'Endpoint parameter is required', array('status' => 400));
-                }
-                
-                $endpoint = $arguments['endpoint'];
-                $method = isset($arguments['method']) ? strtoupper($arguments['method']) : 'GET';
-                $params = isset($arguments['params']) ? $arguments['params'] : array();
-                
-                return $this->call_endpoint($endpoint, $method, $params);
-                
+        // Process based on method
+        switch ($method) {
+            case 'ping':
+                // Log ping if needed
+                error_log('MCP ping received');
+                break;
+            case 'cancel':
+                // Handle cancellation
+                error_log('MCP cancel request received');
+                break;
             default:
-                return new WP_Error('unknown_tool', 'Unknown tool name', array('status' => 400));
+                // Unknown notification
+                error_log('Unknown MCP notification: ' . $method);
+                break;
         }
     }
 
-    private function discover_endpoints() {
-        // Get all registered REST routes
-        $rest_server = rest_get_server();
-        $routes = $rest_server->get_routes();
-        
-        error_log('WPMCP Debug - Number of routes found: ' . count($routes));
-        
-        $endpoints = array();
-        
-        foreach ($routes as $route => $route_handlers) {
-            if (empty($route_handlers)) {
-                continue;
-            }
-            
-            // Extract namespace from the route path instead
-            $namespace = '';
-            $path_parts = explode('/', trim($route, '/'));
-            
-            if (count($path_parts) >= 2) {
-                // For routes like /wp/v2/posts, the namespace would be wp/v2
-                $namespace = $path_parts[0] . '/' . $path_parts[1];
-            } elseif (count($path_parts) == 1) {
-                // For root namespace routes
-                $namespace = $path_parts[0];
-            }
-            
-            error_log('WPMCP Debug - Route: ' . $route . ' extracted namespace: ' . $namespace);
-            
-            // Only include wp/v2 and wpmcp/v1 namespaces
-            if ($namespace != 'wp/v2' && $namespace != 'wpmcp/v1') {
-                continue;
-            }
-            
-            // Get available methods
-            $methods = array();
-            foreach ($route_handlers as $handler) {
-                if (isset($handler['methods'])) {
-                    $handler_methods = $handler['methods'];
-                    foreach ($handler_methods as $method => $allowed) {
-                        if ($allowed && !in_array($method, $methods)) {
-                            $methods[] = $method;
-                        }
-                    }
-                }
-            }
-            
-            $endpoints[] = array(
-                'path' => $route,
-                'namespace' => $namespace,
-                'methods' => $methods
-            );
+    private function handle_initialize($id, $params) {
+        // Check if client capabilities are compatible
+        if (!isset($params['clientCapabilities'])) {
+            return $this->create_jsonrpc_error(-32602, 'Invalid params: clientCapabilities required', $id);
         }
-        
-        error_log('WPMCP Debug - Total endpoints found: ' . count($endpoints));
-        
-        return array(
-            'type' => 'success',
-            'data' => $endpoints
-        );
-    }       
 
-    private function call_endpoint($endpoint, $method, $params) {
-        // Ensure the endpoint starts with a slash
-        if (substr($endpoint, 0, 1) !== '/') {
-            $endpoint = '/' . $endpoint;
-        }
-        
-        // Determine if this is a WP REST API endpoint
-        $is_wp_api = (strpos($endpoint, '/wp/v2/') === 0);
-        
-        // For security, check if this endpoint is allowed
-        if ($is_wp_api) {
-            $allowed_endpoints = get_option('wpmcp_allowed_endpoints', array());
-            $endpoint_type = $this->get_endpoint_type($endpoint);
-            
-            if (!in_array($endpoint_type, $allowed_endpoints)) {
-                return new WP_Error(
-                    'forbidden_endpoint', 
-                    'Access to this endpoint type is not allowed', 
-                    array('status' => 403)
-                );
-            }
-        }
-        
-        // Get an admin user and set as current user
-        $admin_users = get_users(array('role' => 'administrator', 'number' => 1));
-        if (!empty($admin_users)) {
-            $admin_user = $admin_users[0];
-            wp_set_current_user($admin_user->ID);
-        }
-        
-        // Create a REST request
-        $server = rest_get_server();
-        $request = new WP_REST_Request($method, $endpoint);
-        
-        // Add parameters based on method
-        if ($method === 'GET') {
-            $request->set_query_params($params);
-        } else {
-            $request->set_body_params($params);
-        }
-        
-        // Dispatch the request
-        $response = $server->dispatch($request);
-        
-        // Handle the response
-        if ($response->is_error()) {
-            $error = $response->as_error();
-            return new WP_Error(
-                'api_error', 
-                'API returned error: ' . $error->get_error_message(), 
-                array('status' => $error->get_error_code())
-            );
-        }
-        
-        return array(
-            'type' => 'success',
-            'data' => $response->get_data()
-        );
-    }    
-    
-    private function get_endpoint_type($endpoint) {
-        // Extract the resource type from the endpoint path
-        // Example: /wp/v2/posts -> posts
-        $parts = explode('/', trim($endpoint, '/'));
-        if (count($parts) >= 3 && $parts[0] === 'wp' && $parts[1] === 'v2') {
-            return $parts[2];
-        }
-        return '';
-    }
-
-    private function handle_describe() {
-        // Return a comprehensive tool description
-        return array(
-            'type' => 'description',
-            'data' => array(
-                'name' => 'wpmcp',
-                'version' => '1.0.0',
-                'description' => 'WordPress Model Context Protocol Server enabling AI assistants to interact this WordPress site.',
-                'functions' => array(
-                    array(
-                        'name' => 'wp_discover_endpoints',
-                        'description' => 'Maps all available REST API endpoints on this WordPress site and returns their methods and namespaces. This allows you to understand what operations are possible without having to manually specify endpoints.',
-                        'parameters' => array(
-                            'type' => 'object',
-                            'properties' => array(),
-                            'required' => array()
-                        )
-                    ),
-                    array(
-                        'name' => 'wp_call_endpoint',
-                        'description' => 'Executes specific REST API requests to the WordPress site using provided parameters. It handles both read and write operations to manage content, users, and site settings.',
-                        'parameters' => array(
-                            'type' => 'object',
-                            'properties' => array(
-                                'endpoint' => array(
-                                    'type' => 'string',
-                                    'description' => 'API endpoint path (e.g., /wp/v2/posts)'
-                                ),
-                                'method' => array(
-                                    'type' => 'string',
-                                    'enum' => array('GET', 'POST', 'PUT', 'DELETE', 'PATCH'),
-                                    'description' => 'HTTP method',
-                                    'default' => 'GET'
-                                ),
-                                'params' => array(
-                                    'type' => 'object',
-                                    'description' => 'Request parameters or body data'
-                                )
-                            ),
-                            'required' => array('endpoint')
-                        )
-                    )
+        // Return server capabilities
+        return $this->create_jsonrpc_response($id, array(
+            'serverInfo' => array(
+                'name' => 'WordPress MCP Server',
+                'version' => WPMCP_VERSION,
+                'implementation' => $this->implementation
+            ),
+            'serverCapabilities' => array(
+                'protocolVersion' => '2024-04-30',
+                'transports' => array(
+                    'http' => true,
+                    'sse' => get_option('wpmcp_transport', 'http') === 'sse'
                 ),
-                'examples' => array(
-                    array(
-                        'name' => 'List recent posts',
-                        'tool' => 'wp_call_endpoint',
-                        'args' => array(
-                            'endpoint' => '/wp/v2/posts',
-                            'method' => 'GET',
-                            'params' => array(
-                                'per_page' => 5,
-                                'orderby' => 'date',
-                                'order' => 'desc'
-                            )
-                        )
-                    ),
-                    array(
-                        'name' => 'Create a new post',
-                        'tool' => 'wp_call_endpoint',
-                        'args' => array(
-                            'endpoint' => '/wp/v2/posts',
-                            'method' => 'POST',
-                            'params' => array(
-                                'title' => 'Example Post Title',
-                                'content' => 'This is the content of the post.',
-                                'status' => 'draft'
-                            )
-                        )
-                    ),
-                    array(
-                        'name' => 'Get categories',
-                        'tool' => 'wp_call_endpoint',
-                        'args' => array(
-                            'endpoint' => '/wp/v2/categories',
-                            'method' => 'GET'
-                        )
-                    ),
-                    array(
-                        'name' => 'Update a post',
-                        'tool' => 'wp_call_endpoint',
-                        'args' => array(
-                            'endpoint' => '/wp/v2/posts/123',
-                            'method' => 'PUT',
-                            'params' => array(
-                                'title' => 'Updated Title',
-                                'content' => 'Updated content for this post.'
-                            )
-                        )
-                    ),
-                    array(
-                        'name' => 'Get site info',
-                        'tool' => 'wp_call_endpoint',
-                        'args' => array(
-                            'endpoint' => '/',
-                            'method' => 'GET'
-                        )
-                    )
+                'tools' => array(
+                    'wp_discover_endpoints' => true,
+                    'wp_call_endpoint' => true,
+                    'wp_get_resource' => true
+                ),
+                'resources' => array(
+                    'wordpress' => true
                 )
+            )
+        ));
+    }
+
+    private function handle_tool_call($id, $params) {
+        if (!isset($params['name']) || !isset($params['arguments'])) {
+            return $this->create_jsonrpc_error(-32602, 'Invalid params: tool call requires name and arguments', $id);
+        }
+        
+        $tool_name = $params['name'];
+        $arguments = $params['arguments'];
+        
+        // Execute the tool using the tools class
+        $result = WPMCP_Tools::execute_tool($tool_name, $arguments);
+        
+        // Check for errors
+        if (isset($result['error'])) {
+            $error = $result['error'];
+            return $this->create_jsonrpc_error(
+                $error['code'],
+                $error['message'],
+                $id
+            );
+        }
+        
+        return $this->create_jsonrpc_response($id, $result);
+    }
+
+    private function handle_describe_tools($id) {
+        return $this->create_jsonrpc_response($id, array(
+            'tools' => WPMCP_Tools::get_tools_description()
+        ));
+    }
+
+    private function handle_discover_resources($id) {
+        // Return available WordPress resources
+        $resources = WPMCP_Resources::discover_resources();
+        
+        return $this->create_jsonrpc_response($id, array(
+            'resources' => $resources
+        ));
+    }
+    
+    private function handle_get_resource($id, $params) {
+        if (!isset($params['uri'])) {
+            return $this->create_jsonrpc_error(-32602, 'Invalid params: uri is required', $id);
+        }
+        
+        $uri = $params['uri'];
+        $resource = WPMCP_Resources::get_resource($uri);
+        
+        if ($resource === null) {
+            return $this->create_jsonrpc_error(404, 'Resource not found', $id);
+        }
+        
+        return $this->create_jsonrpc_response($id, array(
+            'resource' => $resource
+        ));
+    }
+
+    /**
+     * Handle SSE connection for streaming responses
+     */
+    public function handle_sse_connection($request) {
+        // Initialize SSE connection
+        WPMCP_Transport::init_sse_connection();
+        
+        // Send initial connection established message
+        WPMCP_Transport::send_sse_message('connection', array(
+            'status' => 'connected',
+            'serverInfo' => array(
+                'name' => 'WordPress MCP Server',
+                'version' => WPMCP_VERSION,
+                'implementation' => $this->implementation
+            )
+        ));
+        
+        // Keep connection open for a while to receive messages
+        $start_time = time();
+        $timeout = 300; // 5 minutes timeout
+        
+        while (time() - $start_time < $timeout) {
+            // Check for new messages in the queue
+            // This is a placeholder - in a real implementation, you would check a message queue
+            
+            // Sleep to prevent CPU hogging
+            sleep(1);
+            
+            // Send a keep-alive ping every 30 seconds
+            if ((time() - $start_time) % 30 === 0) {
+                WPMCP_Transport::send_sse_message('ping', array('time' => time()));
+            }
+            
+            // Check if client disconnected
+            if (connection_aborted()) {
+                break;
+            }
+        }
+        
+        exit;
+    }
+
+    /**
+     * Create a JSON-RPC 2.0 response
+     */
+    private function create_jsonrpc_response($id, $result) {
+        return array(
+            'jsonrpc' => '2.0',
+            'id' => $id,
+            'result' => $result
+        );
+    }
+    
+    /**
+     * Create a JSON-RPC 2.0 error response
+     */
+    private function create_jsonrpc_error($code, $message, $id) {
+        return array(
+            'jsonrpc' => '2.0',
+            'id' => $id,
+            'error' => array(
+                'code' => $code,
+                'message' => $message
             )
         );
     }
