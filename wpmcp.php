@@ -22,12 +22,79 @@ require_once WPMCP_PLUGIN_DIR . 'includes/class-wpmcp-transport.php';
 require_once WPMCP_PLUGIN_DIR . 'includes/class-wpmcp-tools.php';
 require_once WPMCP_PLUGIN_DIR . 'includes/class-wpmcp-resources.php';
 
+// Register activation hook
+register_activation_hook(__FILE__, 'wpmcp_activate');
+
+/**
+ * Plugin activation function
+ * Initializes all plugin options with default values
+ */
+function wpmcp_activate() {
+    // Initialize API key if not set (generate a random one)
+    if (get_option('wpmcp_api_key') === false) {
+        $api_key = substr(md5(uniqid(rand(), true)), 0, 16);
+        update_option('wpmcp_api_key', $api_key);
+    }
+    
+    // Initialize allowed endpoints
+    if (get_option('wpmcp_allowed_endpoints') === false) {
+        update_option('wpmcp_allowed_endpoints', array(
+            'posts', 'pages', 'categories', 'tags', 'comments', 'users', 'media', 'plugins', 'themes', 'settings'
+        ));
+    }
+    
+    // Initialize transport setting
+    if (get_option('wpmcp_transport') === false) {
+        update_option('wpmcp_transport', 'http');
+    }
+    
+    // Initialize other plugin options
+    if (get_option('wpmcp_enable_notifications') === false) {
+        update_option('wpmcp_enable_notifications', 1);
+    }
+    
+    if (get_option('wpmcp_require_consent') === false) {
+        update_option('wpmcp_require_consent', '');
+    }
+    
+    if (get_option('wpmcp_resource_subscriptions') === false) {
+        update_option('wpmcp_resource_subscriptions', array());
+    }
+    
+    if (get_option('wpmcp_resource_notifications') === false) {
+        update_option('wpmcp_resource_notifications', array());
+    }
+    
+    if (get_option('wpmcp_prompt_templates') === false) {
+        update_option('wpmcp_prompt_templates', array());
+    }
+    
+    if (get_option('wpmcp_consent_logs') === false) {
+        update_option('wpmcp_consent_logs', array());
+    }
+    
+    // Create includes directory if it doesn't exist
+    if (!file_exists(WPMCP_PLUGIN_DIR . 'includes')) {
+        mkdir(WPMCP_PLUGIN_DIR . 'includes', 0755);
+    }
+    
+    // Flush rewrite rules to ensure our REST endpoints are registered
+    flush_rewrite_rules();
+}
+
 class WPMCP_Plugin {
     private $api_key = '';
     private $implementation = array(
         'name' => 'wpmcp',
         'version' => '1.1.0'
     );
+
+    /**
+     * Generate a valid WordPress REST API nonce for the current user
+     */
+    private function generate_rest_nonce() {
+        return wp_create_nonce('wp_rest');
+    }
     
     public function __construct() {
         add_action('admin_menu', array($this, 'add_admin_menu'));
@@ -41,6 +108,9 @@ class WPMCP_Plugin {
         if (!file_exists(WPMCP_PLUGIN_DIR . 'includes')) {
             mkdir(WPMCP_PLUGIN_DIR . 'includes', 0755);
         }
+        
+        // Add REST API authentication bypass for internal requests
+        add_filter('rest_authentication_errors', array($this, 'handle_rest_authentication'), 999);
     }
 
     public function add_admin_menu() {
@@ -71,7 +141,38 @@ class WPMCP_Plugin {
             'type' => 'string',
             'default' => 'http'
         ));
-    }
+        
+        // Register other settings
+        register_setting('wpmcp_settings', 'wpmcp_enable_notifications', array(
+            'type' => 'integer',
+            'default' => 1
+        ));
+        
+        register_setting('wpmcp_settings', 'wpmcp_require_consent', array(
+            'type' => 'string',
+            'default' => ''
+        ));
+        
+        register_setting('wpmcp_settings', 'wpmcp_resource_subscriptions', array(
+            'type' => 'array',
+            'default' => array()
+        ));
+        
+        register_setting('wpmcp_settings', 'wpmcp_resource_notifications', array(
+            'type' => 'array',
+            'default' => array()
+        ));
+        
+        register_setting('wpmcp_settings', 'wpmcp_prompt_templates', array(
+            'type' => 'array',
+            'default' => array()
+        ));
+        
+        register_setting('wpmcp_settings', 'wpmcp_consent_logs', array(
+            'type' => 'array',
+            'default' => array()
+        ));
+    }    
 
     public function settings_page() {
         ?>
@@ -155,7 +256,7 @@ class WPMCP_Plugin {
             </ul>
             
             <h3>MCP Protocol Information</h3>
-            <p>This plugin implements the MCP protocol version 2024-11-05 with the following features:</p>
+            <p>This plugin implements the MCP protocol version 2025-04-30 with the following features:</p>
             <ul style="list-style-type: disc; margin-left: 20px;">
                 <li>JSON-RPC 2.0 message format</li>
                 <li>HTTP and SSE transport layers</li>
@@ -184,35 +285,117 @@ class WPMCP_Plugin {
     }
     
     public function verify_api_key($request) {
-        $headers = $request->get_headers();
+        // Get the request method and endpoint
+        $method = $request->get_method();
+        $route = $request->get_route();
         
-        // Debug the headers to see what's actually coming in
-        error_log('WPMCP Debug - Headers: ' . print_r($headers, true));
+        // Check if this is a GET request to public endpoints (Posts, Pages, Categories, Tags)
+        $public_endpoints = array('posts', 'pages', 'categories', 'tags');
+        $is_public_endpoint = false;
         
-        // Check for API key in headers (try multiple possible header names)
-        $header_keys = ['x-api-key', 'x_api_key', 'http_x_api_key', 'http-x-api-key', 'X-API-KEY', 'X_API_KEY'];
-        
-        foreach ($header_keys as $key) {
-            if (isset($headers[$key]) && !empty($headers[$key][0])) {
-                error_log('WPMCP Debug - Found API key in header: ' . $key);
-                if ($headers[$key][0] === $this->api_key) {
-                    return true;
-                }
+        foreach ($public_endpoints as $endpoint) {
+            if (strpos($route, '/wp/v2/' . $endpoint) !== false && $method === 'GET') {
+                $is_public_endpoint = true;
+                break;
             }
         }
         
-        // Check for API key in request body as fallback
-        $json_str = file_get_contents('php://input');
-        $data = json_decode($json_str, true);
-        
-        if (isset($data['api_key']) && $data['api_key'] === $this->api_key) {
-            error_log('WPMCP Debug - Found API key in request body');
+        // If this is a GET request to a public endpoint, no API key required
+        if ($is_public_endpoint) {
+            // Set up a read-only user for public endpoints
+            $this->setup_read_only_user();
             return true;
         }
         
-        error_log('WPMCP Debug - API key not found or does not match');
-        return false;
+        // For all other requests, API key is required
+        $headers = $request->get_headers();
+        $api_key_valid = false;
+        
+        // Check for API key in headers (with underscore format that WordPress uses)
+        if (isset($headers['x_api_key']) && !empty($headers['x_api_key'][0])) {
+            $api_key_valid = $headers['x_api_key'][0] === $this->api_key;
+        }
+        
+        // Also check for hyphenated format as fallback
+        if (!$api_key_valid && isset($headers['x-api-key']) && !empty($headers['x-api-key'][0])) {
+            $api_key_valid = $headers['x-api-key'][0] === $this->api_key;
+        }
+        
+        // Check for API key in request body as fallback
+        if (!$api_key_valid) {
+            $json_str = file_get_contents('php://input');
+            $data = json_decode($json_str, true);
+            
+            if (isset($data['api_key']) && $data['api_key'] === $this->api_key) {
+                $api_key_valid = true;
+            }
+        }
+        
+        // If API key is valid, set up an admin user with proper authentication
+        if ($api_key_valid) {
+            $this->setup_authenticated_admin_user();
+        }
+        
+        return $api_key_valid;
+    }
+    
+    /**
+     * Set up a read-only user for public endpoints
+     */
+    private function setup_read_only_user() {
+        // Create a subscriber-level user context for read-only operations
+        $subscriber_users = get_users(array('role' => 'subscriber', 'number' => 1));
+        
+        if (!empty($subscriber_users)) {
+            $user = $subscriber_users[0];
+        } else {
+            // If no subscriber exists, use a generic user context
+            $user = new WP_User(0);
+            $user->add_cap('read');
+        }
+        
+        wp_set_current_user($user->ID);
+    }
+    
+    /**
+     * Set up an authenticated admin user with proper cookies/nonces
+     */
+    private function setup_authenticated_admin_user() {
+        // Get an admin user
+        $admin_users = get_users(array('role' => 'administrator', 'number' => 1));
+        
+        if (!empty($admin_users)) {
+            $admin_user = $admin_users[0];
+            
+            // Set the current user to the admin
+            wp_set_current_user($admin_user->ID);
+            
+            // Generate a REST nonce for this user
+            $rest_nonce = $this->generate_rest_nonce();
+            
+            // Store the nonce for later use
+            if (!defined('WPMCP_REST_NONCE')) {
+                define('WPMCP_REST_NONCE', $rest_nonce);
+            }
+            
+            // Mark this as an internal request
+            if (!defined('WPMCP_INTERNAL_REQUEST')) {
+                define('WPMCP_INTERNAL_REQUEST', true);
+            }
+        }
     }    
+
+    /**
+     * Handle REST API authentication for internal requests
+     */
+    public function handle_rest_authentication($errors) {
+        // Skip authentication for our internal WPMCP requests
+        if (defined('WPMCP_INTERNAL_REQUEST') && WPMCP_INTERNAL_REQUEST) {
+            return true; // Authentication successful
+        }
+        
+        return $errors; // Use default authentication for other requests
+    }
 
     public function handle_mcp_request($request) {
         // Get the raw POST data
@@ -298,7 +481,7 @@ class WPMCP_Plugin {
                 'implementation' => $this->implementation
             ),
             'serverCapabilities' => array(
-                'protocolVersion' => '2024-04-30',
+                'protocolVersion' => '2025-04-30',
                 'transports' => array(
                     'http' => true,
                     'sse' => get_option('wpmcp_transport', 'http') === 'sse'
@@ -323,6 +506,29 @@ class WPMCP_Plugin {
         $tool_name = $params['name'];
         $arguments = $params['arguments'];
         
+        // For wp_call_endpoint, check if we need to enforce additional authentication
+        if ($tool_name === 'wp_call_endpoint') {
+            $endpoint = isset($arguments['endpoint']) ? $arguments['endpoint'] : '';
+            $method = isset($arguments['method']) ? strtoupper($arguments['method']) : 'GET';
+            
+            // Check if this is a restricted endpoint (Comments, Users, Media, Plugins, Themes, Settings)
+            $restricted_endpoints = array('comments', 'users', 'media', 'plugins', 'themes', 'settings');
+            $is_restricted = false;
+            
+            foreach ($restricted_endpoints as $restricted) {
+                if (strpos($endpoint, '/wp/v2/' . $restricted) !== false) {
+                    $is_restricted = true;
+                    break;
+                }
+            }
+            
+            // If this is a write operation or restricted endpoint, ensure we're authenticated
+            if ($method !== 'GET' || $is_restricted) {
+                // Ensure we're using an admin user with proper authentication
+                $this->setup_authenticated_admin_user();
+            }
+        }
+        
         // Execute the tool using the tools class
         $result = WPMCP_Tools::execute_tool($tool_name, $arguments);
         
@@ -337,7 +543,7 @@ class WPMCP_Plugin {
         }
         
         return $this->create_jsonrpc_response($id, $result);
-    }
+    }    
 
     private function handle_describe_tools($id) {
         return $this->create_jsonrpc_response($id, array(

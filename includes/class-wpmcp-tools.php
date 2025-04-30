@@ -181,7 +181,12 @@ class WPMCP_Tools {
     /**
      * Call a WordPress REST API endpoint
      */
-    private static function call_endpoint($endpoint, $method, $params) {
+    public static function call_endpoint($endpoint, $method, $params) {
+        error_log('WPMCP Debug - Starting call_endpoint');
+        error_log('WPMCP Debug - Endpoint: ' . $endpoint);
+        error_log('WPMCP Debug - Method: ' . $method);
+        error_log('WPMCP Debug - Params: ' . print_r($params, true));
+        
         // Ensure the endpoint starts with a slash
         if (substr($endpoint, 0, 1) !== '/') {
             $endpoint = '/' . $endpoint;
@@ -192,8 +197,18 @@ class WPMCP_Tools {
         
         // For security, check if this endpoint is allowed
         if ($is_wp_api) {
-            $allowed_endpoints = get_option('wpmcp_allowed_endpoints', array());
+            // Use a default array of allowed endpoints if the option doesn't exist
+            $default_allowed = array('posts', 'pages', 'categories', 'tags', 'comments', 'users', 'media', 'plugins', 'themes', 'settings');
+            $allowed_endpoints = get_option('wpmcp_allowed_endpoints', $default_allowed);
+            
+            // If the option is empty, use the default
+            if (empty($allowed_endpoints)) {
+                $allowed_endpoints = $default_allowed;
+            }
+            
             $endpoint_type = self::get_endpoint_type($endpoint);
+            error_log('WPMCP Debug - Endpoint type: ' . $endpoint_type);
+            error_log('WPMCP Debug - Allowed endpoints: ' . print_r($allowed_endpoints, true));
             
             if (!in_array($endpoint_type, $allowed_endpoints)) {
                 return array(
@@ -205,22 +220,25 @@ class WPMCP_Tools {
             }
         }
         
-        // Get an admin user and set as current user
-        $admin_users = get_users(array('role' => 'administrator', 'number' => 1));
-        if (!empty($admin_users)) {
-            $admin_user = $admin_users[0];
-            wp_set_current_user($admin_user->ID);
-        }
-        
         // Create a REST request
         $server = rest_get_server();
         $request = new WP_REST_Request($method, $endpoint);
+        
+        // Add REST nonce to the request if available
+        if (defined('WPMCP_REST_NONCE')) {
+            $request->add_header('X-WP-Nonce', WPMCP_REST_NONCE);
+        }
         
         // Add parameters based on method
         if ($method === 'GET') {
             $request->set_query_params($params);
         } else {
             $request->set_body_params($params);
+        }
+        
+        // Mark this as an internal request to bypass normal REST API auth
+        if (!defined('WPMCP_INTERNAL_REQUEST')) {
+            define('WPMCP_INTERNAL_REQUEST', true);
         }
         
         // Dispatch the request
@@ -232,7 +250,7 @@ class WPMCP_Tools {
             return array(
                 'error' => array(
                     'code' => $error->get_error_code(),
-                    'message' => $error->get_error_message()
+                    'message' => 'API returned error: ' . $error->get_error_message()
                 )
             );
         }

@@ -51,7 +51,7 @@ Alternatively, you can install manually:
 
 1. After activating the plugin, go to Settings → WPMCP
 2. Generate or enter an API key (required for security)
-3. Select your preferred transport method (HTTP or SSE)
+3. Select your preferred transport method (HTTP/SSE does not yet work - placeholders for now)
 4. Select which WordPress resources can be accessed via the MCP API:
    - Posts
    - Pages
@@ -303,14 +303,14 @@ You can also interact with the WPMCP API directly using JSON-RPC 2.0:
 ```bash
 curl -X POST https://your-site.com/wp-json/wpmcp/v1/mcp \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: your-api-key" \
+  -H "X_API_Key: your-api-key" \
   -d '{
     "jsonrpc": "2.0",
     "id": 1,
     "method": "initialize",
     "params": {
       "clientCapabilities": {
-        "protocolVersion": "2024-11-05",
+        "protocolVersion": "2025-04-30",
         "transports": {
           "http": true,
           "sse": false
@@ -320,11 +320,10 @@ curl -X POST https://your-site.com/wp-json/wpmcp/v1/mcp \
   }'
 ```
 
-### Call a Tool
+### Public GET Request (No API Key Required)
 ```bash
 curl -X POST https://your-site.com/wp-json/wpmcp/v1/mcp \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: your-api-key" \
   -d '{
     "jsonrpc": "2.0",
     "id": 2,
@@ -342,19 +341,43 @@ curl -X POST https://your-site.com/wp-json/wpmcp/v1/mcp \
   }'
 ```
 
-### Get a Resource
+### Protected Request (API Key Required)
 ```bash
 curl -X POST https://your-site.com/wp-json/wpmcp/v1/mcp \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: your-api-key" \
+  -H "X_API_Key: your-api-key" \
   -d '{
     "jsonrpc": "2.0",
     "id": 3,
     "method": "toolCall",
     "params": {
+      "name": "wp_call_endpoint",
+      "arguments": {
+        "endpoint": "/wp/v2/posts",
+        "method": "POST",
+        "params": {
+          "title": "New Post via API",
+          "content": "This is a post created through the WPMCP API.",
+          "status": "draft"
+        }
+      }
+    }
+  }'
+```
+
+### Get a Resource (API Key Required for Sensitive Resources)
+```bash
+curl -X POST https://your-site.com/wp-json/wpmcp/v1/mcp \
+  -H "Content-Type: application/json" \
+  -H "X_API_Key: your-api-key" \
+  -d '{
+    "jsonrpc": "2.0",
+    "id": 4,
+    "method": "toolCall",
+    "params": {
       "name": "wp_get_resource",
       "arguments": {
-        "uri": "wordpress:/posts/1"
+        "uri": "wordpress:/users/1"
       }
     }
   }'
@@ -364,10 +387,10 @@ curl -X POST https://your-site.com/wp-json/wpmcp/v1/mcp \
 ```bash
 curl -X POST https://your-site.com/wp-json/wpmcp/v1/mcp \
   -H "Content-Type: application/json" \
-  -H "X-API-Key: your-api-key" \
+  -H "X_API_Key: your-api-key" \
   -d '{
     "jsonrpc": "2.0",
-    "id": 4,
+    "id": 5,
     "method": "discoverResources",
     "params": {}
   }'
@@ -396,12 +419,78 @@ To use SSE, you need to:
 
 ## Security Considerations
 
+- API key authentication is implemented with different levels of access:
+  - Public GET requests to Posts, Pages, Categories, and Tags don't require an API key
+  - All write operations (POST, PUT, DELETE, PATCH) require API key authentication
+  - All requests to sensitive endpoints (Comments, Users, Media, Plugins, Themes, Settings) require API key authentication regardless of method
 - Keep your API key secure and never commit it to version control
 - Use HTTPS for all WordPress sites
 - Regularly rotate API keys
 - Be selective about which WordPress resources you allow access to
 - Follow the principle of least privilege when assigning user roles
 - Consider implementing IP whitelisting for additional security
+
+## Authentication
+
+WPMCP implements a tiered authentication system:
+
+1. **Public Access (No API Key Required)**:
+   - GET requests to Posts, Pages, Categories, and Tags
+   - These requests use a read-only user context with limited permissions
+
+2. **API Key Authentication (Required for)**:
+   - All write operations (POST, PUT, DELETE, PATCH) to any endpoint
+   - Any request (including GET) to sensitive endpoints:
+     - Comments
+     - Users
+     - Media
+     - Plugins
+     - Themes
+     - Settings
+
+3. **Authentication Headers**:
+   - The API key can be provided in the `X_API_Key` header (recommended)
+   - Alternatively, it can be included in the request body as `api_key`
+
+Example of a public request (no API key required):
+```bash
+curl -X GET http://your-site.com/wp-json/wpmcp/v1/mcp -H "Content-Type: application/json" -d '{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "method": "toolCall",
+  "params": {
+    "name": "wp_call_endpoint",
+    "arguments": {
+      "endpoint": "/wp/v2/posts",
+      "method": "GET",
+      "params": {
+        "per_page": 5
+      }
+    }
+  }
+}'
+```
+
+Example of a request requiring API key authentication:
+```bash
+curl -X POST http://your-site.com/wp-json/wpmcp/v1/mcp -H "Content-Type: application/json" -H "X_API_Key: your-api-key" -d '{
+  "jsonrpc": "2.0",
+  "id": 2,
+  "method": "toolCall",
+  "params": {
+    "name": "wp_call_endpoint",
+    "arguments": {
+      "endpoint": "/wp/v2/posts",
+      "method": "POST",
+      "params": {
+        "title": "New Post",
+        "content": "Post content",
+        "status": "draft"
+      }
+    }
+  }
+}'
+```
 
 ## Changelog
 
@@ -412,13 +501,14 @@ To use SSE, you need to:
 - Improved error handling and validation
 - Added tool descriptions and examples
 - Enhanced security features
+- Implemented tiered authentication system with public access for read-only operations
+- Fixed header authentication to properly handle WordPress header format
 
 ### Version 1.0.0
 - Initial release
 - Basic MCP implementation
 - WordPress REST API integration
 - API key authentication
-
 ## License
 
 This project is licensed under the GNU General Public License v3.0 (GPL-3.0).
@@ -426,4 +516,3 @@ This project is licensed under the GNU General Public License v3.0 (GPL-3.0).
 ## Support
 
 For support, please open an issue on the GitHub repository or contact the maintainer.
-
