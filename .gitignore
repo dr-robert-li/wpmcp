@@ -28,6 +28,9 @@ mcp-servers-main/
 # WP Plugin Reference
 wp-boilerplate/
 
+# Google A2A Reference
+A2A/
+
 # Environment Files
 .env
 .env.local
@@ -53,3 +56,37 @@ logs/
 # Temporary files
 tmp/
 temp/
+
+# JavaScript project files
+# node modules
+node_modules/
+
+# Package files
+# package.json
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Build directories
+dist/
+build/
+coverage/
+.cache/
+.parcel-cache/
+
+# Yarn
+yarn-error.log
+.yarn-integrity
+.yarn/
+.pnp.*
+
+# npm
+.npm/
+.npmrc
+
+# TypeScript
+*.tsbuildinfo
+
+# Javascript
+# *.js
+*.jsx

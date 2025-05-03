@@ -1,0 +1,27 @@
+{
+  "name": "wp-mcp-agent",
+  "version": "1.0.0",
+  "description": "A natural language agent for interacting with WordPress via the Model Context Protocol",
+  "main": "wp-mcp-agent.js",
+  "scripts": {
+    "start": "node wp-mcp-agent.js",
+    "nl-agent": "node wp-mcp-nl-agent.js"
+  },
+  "keywords": [
+    "wordpress",
+    "mcp",
+    "model-context-protocol",
+    "natural-language",
+    "agent"
+  ],
+  "author": "Generated with Claude",
+  "license": "MIT",
+  "dependencies": {
+    "chalk": "^4.1.2",
+    "node-fetch": "^2.6.9",
+    "readline": "^1.3.0",
+    "dotenv": "^16.3.1",
+    "openai": "^4.20.0",
+    "@anthropic-ai/sdk": "^0.16.0"
+  }
+}

@@ -596,7 +596,7 @@ class WPMCP_Plugin {
         
         // Keep connection open for a while to receive messages
         $start_time = time();
-        $timeout = 300; // 5 minutes timeout
+        $timeout = 3600; // 1 hour timeout (increase from 5 minutes)
         
         while (time() - $start_time < $timeout) {
             // Check for new messages in the queue
@@ -608,16 +608,19 @@ class WPMCP_Plugin {
             // Send a keep-alive ping every 30 seconds
             if ((time() - $start_time) % 30 === 0) {
                 WPMCP_Transport::send_sse_message('ping', array('time' => time()));
+                error_log("SSE ping sent at " . time());
             }
             
             // Check if client disconnected
             if (connection_aborted()) {
+                error_log("SSE connection aborted by client");
                 break;
             }
         }
         
+        error_log("SSE connection closed after timeout");
         exit;
-    }
+    }    
 
     /**
      * Create a JSON-RPC 2.0 response
