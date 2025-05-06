@@ -1,0 +1,26 @@
+{
+  "name": "a2a-mcp-client",
+  "version": "1.0.0",
+  "description": "A2A-MCP client for WordPress integration",
+  "main": "src/index.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/index.js",
+    "example": "node examples/wp-posts-example.js",
+    "demo": "node examples/simple-demo.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [
+    "mcp",
+    "wordpress",
+    "a2a",
+    "client"
+  ],
+  "author": "Dr. Robert Li",
+  "license": "GPL-3.0",
+  "dependencies": {
+    "node-fetch": "^3.3.2",
+    "eventsource": "^2.0.2",
+    "chalk": "^5.3.0"
+  }
+}
