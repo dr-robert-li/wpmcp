@@ -1,3 +1,4 @@
 # Changelog
+* (6 May 2025). Version 1.2.0 - Added A2A (Agent-to-Agent) adapter for MCP, enabling full CRUD functionality for WordPress content via A2A protocol. Implemented complete Create, Read, Update, and Delete operations with natural language support. Added examples for A2A server integration. Fixed SSE transport issues.
 * (30 Apr 2025). Version 1.1.0 - Added support for JSON-RPC 2.0 message format, implemented resource model with standardized URIs, added support for Server-Sent Events (SSE) transport, improved error handling and validation, added tool descriptions and examples, enhanced security features.
 * (1 Jan 2025). Version 1.0.0 - Initial Release. Basic MCP implementation, WordPress REST API integration, API key authentication.

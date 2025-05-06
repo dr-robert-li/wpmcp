@@ -1,7 +1,7 @@
 # WordPress Model Context Protocol (WPMCP)
 
 ### Version
-1.1.0
+1.2.0
 
 ### Author
 Dr. Robert Li
@@ -493,6 +493,12 @@ curl -X POST http://your-site.com/wp-json/wpmcp/v1/mcp -H "Content-Type: applica
 ```
 
 ## Changelog
+
+### Version 1.2.0
+- Added A2A (Agent-to-Agent) adapter for MCP, enabling full CRUD functionality for WordPress content via A2A protocol. 
+- Implemented complete Create, Read, Update, and Delete operations with natural language support. 
+- Added examples for A2A server integration. 
+- Fixed SSE transport issues.
 
 ### Version 1.1.0
 - Added support for JSON-RPC 2.0 message format
