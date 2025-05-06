@@ -509,3 +509,7 @@ The agent's LLM integration can be enhanced in several ways:
 - The agent uses the JSON-RPC 2.0 format for all MCP API calls
 - API keys for LLM providers are stored in memory and are not persisted between sessions
 - Consider implementing proper API key storage and management for production use
+
+## License
+
+This project is licensed under the GNU General Public License v3.0 (GPL-3.0).
