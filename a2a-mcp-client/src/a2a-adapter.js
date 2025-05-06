@@ -383,14 +383,112 @@ export class A2AMCPAdapter {
     
     const text = textPart.text;
     
+    // Add debugging
+    console.log('Processing message text:', text);
+    
     // Parse the message to determine what WordPress operation to perform
     const lowerText = text.toLowerCase();
+    console.log('Lowercase text:', lowerText);
+    
+    // Helper function to extract post creation params from any reasonable format
+    const extractPostParams = (text) => {
+      console.log('Attempting to extract post parameters from:', text);
+      
+      // Initialize with default values
+      let title = 'Untitled Post';
+      let content = 'No content provided.';
+      let status = 'draft';
+      
+      // Try multiple approaches to extract the title
+      const titlePatterns = [
+        // Quoted title patterns
+        /title\s*["']([^"']*)["']/i,
+        /title[:]?\s*["']([^"']*)["']/i,
+        // Title with colon
+        /title[:]?\s*([^,"'\n]*?)(?:,|\s+content|\s+status|$)/i,
+        // Title after "post" or "create post" 
+        /(?:post|create post|new post)\s+(?:titled|called|named)?\s*["']?([^"',\n]*)["']?/i,
+        // Post about X
+        /post\s+about\s+["']?([^"',\n]*)["']?/i,
+        // Simple extraction - everything between post and content
+        /(?:create|new)\s+post\s+(.*?)(?:\s+content|\s+with content|$)/i
+      ];
+      
+      // Try to extract title
+      for (const pattern of titlePatterns) {
+        const match = text.match(pattern);
+        if (match && match[1] && match[1].trim()) {
+          title = match[1].trim();
+          console.log('Found title using pattern:', pattern.toString(), title);
+          break;
+        }
+      }
+      
+      // Try to extract content
+      const contentPatterns = [
+        // Quoted content patterns
+        /content\s*["']([^"']*)["']/i,
+        /content[:]?\s*["']([^"']*)["']/i,
+        // Content with colon
+        /content[:]?\s*([^,"'\n]*?)(?:,|\s+status|$)/i,
+        // Content after "saying"
+        /saying\s+["']?([^"',\n]*)["']?/i,
+        // Body as synonym for content
+        /body\s*["']?([^"',\n]*)["']?/i,
+        /body[:]?\s*["']?([^"',\n]*)["']?/i
+      ];
+      
+      // Try to extract content
+      for (const pattern of contentPatterns) {
+        const match = text.match(pattern);
+        if (match && match[1] && match[1].trim()) {
+          content = match[1].trim();
+          console.log('Found content using pattern:', pattern.toString(), content);
+          break;
+        }
+      }
+      
+      // Try to extract status
+      const statusPatterns = [
+        // Quoted status patterns
+        /status\s*["']([^"']*)["']/i,
+        /status[:]?\s*["']([^"']*)["']/i,
+        // Status with colon
+        /status[:]?\s*([^,"'\n]*?)(?:,|$)/i,
+        // "as" for status
+        /as\s+["']?([a-z]+)["']?/i,
+        // published/draft direct mentions
+        /\s(publish|draft|pending|private)\b/i
+      ];
+      
+      // Try to extract status
+      for (const pattern of statusPatterns) {
+        const match = text.match(pattern);
+        if (match && match[1] && match[1].trim()) {
+          const possibleStatus = match[1].toLowerCase().trim();
+          if (['publish', 'draft', 'pending', 'private'].includes(possibleStatus)) {
+            status = possibleStatus;
+            console.log('Found valid status:', status);
+            break;
+          }
+        }
+      }
+      
+      // Final validation/cleanup
+      if (!title || title.trim() === '') title = 'Untitled Post';
+      if (!content || content.trim() === '') content = 'No content provided.';
+      if (!status || !['publish', 'draft', 'pending', 'private'].includes(status.toLowerCase())) status = 'draft';
+      
+      return { title, content, status };
+    };
+    
     let result = '';
     const artifacts = [];
     
     try {
       // Check for various WordPress operations
       if (lowerText.includes('list posts') || lowerText.includes('show posts')) {
+        console.log('Matched list/show posts pattern');
         const count = lowerText.match(/(\d+)\s+posts/) ? parseInt(lowerText.match(/(\d+)\s+posts/)[1]) : 5;
         const postsResponse = await this.client.getPosts({ per_page: count });
         
@@ -422,6 +520,7 @@ export class A2AMCPAdapter {
         });
       } 
       else if (lowerText.match(/get\s+post\s+(\d+)/i) || lowerText.match(/show\s+post\s+(\d+)/i)) {
+        console.log('Matched get/show post pattern');
         const postIdMatch = lowerText.match(/post\s+(\d+)/i);
         const postId = postIdMatch ? postIdMatch[1] : null;
         
@@ -455,44 +554,99 @@ export class A2AMCPAdapter {
           });
         }
       }
+      // SPECIAL CASE FOR A2A - Directly match "Create post with title ... content ... status ..." pattern
+      else if (lowerText.match(/create\s+post\s+with\s+title/i) && lowerText.includes('content') && lowerText.includes('status')) {
+        console.log('Matched A2A specific post creation pattern!');
+        
+        // Extract title, content and status using regex
+        const titleMatch = text.match(/title\s+"([^"]*)"/i);
+        const contentMatch = text.match(/content\s+"([^"]*)"/i);
+        const statusMatch = text.match(/status\s+"([^"]*)"/i);
+        
+        console.log('Direct matches:', { titleMatch, contentMatch, statusMatch });
+        
+        const title = titleMatch ? titleMatch[1] : 'Untitled Post';
+        const content = contentMatch ? contentMatch[1] : 'No content provided.';
+        const status = statusMatch && statusMatch[1].toLowerCase() === 'draft' ? 'draft' : 'draft';
+        
+        console.log('Direct extracted parameters:', { title, content, status });
+        
+        try {
+          console.log('Directly calling client.createPost()');
+          const postResponse = await this.client.createPost(title, content, status);
+          console.log('Post creation response:', postResponse);
+          
+          result = `Post created successfully!\n\n`;
+          result += `Title: ${postResponse.data.title.raw}\n`;
+          result += `Status: ${postResponse.data.status}\n`;
+          if (postResponse.data.link) {
+            result += `URL: ${postResponse.data.link}\n`;
+          }
+          
+          artifacts.push({
+            id: `created-post-${Date.now()}`,
+            type: 'application/json',
+            title: 'Created WordPress Post',
+            description: 'Details of the newly created post',
+            parts: [
+              {
+                type: 'data',
+                data: {
+                  contentType: 'application/json',
+                  content: JSON.stringify(postResponse.data)
+                }
+              }
+            ]
+          });
+        } catch (error) {
+          console.error('Error creating post directly:', error);
+          result = `Error creating post: ${error.message}`;
+        }
+      }
       else if (lowerText.includes('create post') || lowerText.includes('new post')) {
+        console.log('Matched simple create/new post pattern - returning instructions');
         // For creation, we'd typically ask for more information
         // In a real implementation, this would use input-required status
         result = "To create a post, please provide:\n\n1. Title\n2. Content\n3. Status (publish/draft)\n\nYou can create a post using the format: 'Create post with title \"My Title\", content \"My content.\", status \"draft\"'";
       }
-      else if (lowerText.match(/create\s+post\s+with\s+title\s+"([^"]*)"/i)) {
-        const titleMatch = lowerText.match(/title\s+"([^"]*)"/i);
-        const contentMatch = lowerText.match(/content\s+"([^"]*)"/i);
-        const statusMatch = lowerText.match(/status\s+"([^"]*)"/i);
+      else if (lowerText.includes('title') && (lowerText.includes('create post') || lowerText.includes('new post'))) {
+        console.log('Matched flexible create post pattern - attempting to create post');
         
-        const title = titleMatch ? titleMatch[1] : 'Untitled Post';
-        const content = contentMatch ? contentMatch[1] : 'No content provided.';
-        const status = statusMatch ? statusMatch[1].toLowerCase() : 'draft';
+        // Use the helper function to extract post parameters
+        const { title, content, status } = this._extractPostParams(text);
+        console.log('Extracted parameters using helper function: ', { title, content, status });
         
-        const postResponse = await this.client.createPost(title, content, status);
-        
-        result = `Post created successfully!\n\n`;
-        result += `Title: ${postResponse.data.title.raw}\n`;
-        result += `Status: ${postResponse.data.status}\n`;
-        if (postResponse.data.link) {
-          result += `URL: ${postResponse.data.link}\n`;
-        }
-        
-        artifacts.push({
-          id: `created-post-${Date.now()}`,
-          type: 'application/json',
-          title: 'Created WordPress Post',
-          description: 'Details of the newly created post',
-          parts: [
-            {
-              type: 'data',
-              data: {
-                contentType: 'application/json',
-                content: JSON.stringify(postResponse.data)
+        try {
+          console.log('Calling client.createPost() with:', { title, content, status });
+          const postResponse = await this.client.createPost(title, content, status);
+          console.log('Post creation response:', postResponse);
+          
+          result = `Post created successfully!\n\n`;
+          result += `Title: ${postResponse.data.title.raw}\n`;
+          result += `Status: ${postResponse.data.status}\n`;
+          if (postResponse.data.link) {
+            result += `URL: ${postResponse.data.link}\n`;
+          }
+          
+          artifacts.push({
+            id: `created-post-${Date.now()}`,
+            type: 'application/json',
+            title: 'Created WordPress Post',
+            description: 'Details of the newly created post',
+            parts: [
+              {
+                type: 'data',
+                data: {
+                  contentType: 'application/json',
+                  content: JSON.stringify(postResponse.data)
+                }
               }
-            }
-          ]
-        });
+            ]
+          });
+        } catch (error) {
+          console.error('Error creating post:', error);
+          result = `Error creating post: ${error.message}`;
+        }
       }
       else if (lowerText.includes('list categories') || lowerText.includes('show categories')) {
         const categoriesResponse = await this.client.getCategories();
@@ -602,6 +756,56 @@ export class A2AMCPAdapter {
             }
           ]
         });
+      }
+      // Catch-all handler for any request that might be attempting to create a post
+      else if (lowerText.includes('post') && 
+              (lowerText.includes('create') || lowerText.includes('make') || lowerText.includes('add') || lowerText.includes('new'))) {
+        console.log('Detected possible post creation intent with non-standard format');
+        
+        // Use the helper function to extract post parameters
+        const { title, content, status } = extractPostParams(text);
+        console.log('Extracted parameters from catch-all handler:', { title, content, status });
+        
+        // Check if we've extracted enough meaningful information to create a post
+        // Only proceed if we've got a title or content that's not the default
+        if (title !== 'Untitled Post' || content !== 'No content provided.') {
+          console.log('Attempting to create post with extracted information:', { title, content, status });
+          
+          try {
+            console.log('Calling client.createPost() with:', { title, content, status });
+            const postResponse = await this.client.createPost(title, content, status);
+            console.log('Post creation response:', postResponse);
+            
+            result = `Post created successfully!\n\n`;
+            result += `Title: ${postResponse.data.title.raw}\n`;
+            result += `Status: ${postResponse.data.status}\n`;
+            if (postResponse.data.link) {
+              result += `URL: ${postResponse.data.link}\n`;
+            }
+            
+            artifacts.push({
+              id: `created-post-${Date.now()}`,
+              type: 'application/json',
+              title: 'Created WordPress Post',
+              description: 'Details of the newly created post',
+              parts: [
+                {
+                  type: 'data',
+                  data: {
+                    contentType: 'application/json',
+                    content: JSON.stringify(postResponse.data)
+                  }
+                }
+              ]
+            });
+          } catch (error) {
+            console.error('Error creating post:', error);
+            result = `Error creating post: ${error.message}`;
+          }
+        } else {
+          // Not enough information was extracted
+          result = "It seems like you want to create a post, but I couldn't extract all the necessary information. Please provide:\n\n1. Title\n2. Content\n3. Status (publish/draft)\n\nYou can create a post using the format: 'Create post with title \"My Title\", content \"My content.\", status \"draft\"'";
+        }
       }
       else {
         // Generic help response

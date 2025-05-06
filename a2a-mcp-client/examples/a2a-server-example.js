@@ -30,10 +30,17 @@ const client = new MCPClient({
   configFile: path.join(__dirname, '..', 'wpmcp-config.json')
 });
 
+// Ensure .well-known directory exists
+const wellKnownDir = path.join(__dirname, '..', '.well-known');
+if (!fs.existsSync(wellKnownDir)) {
+  console.log('Creating .well-known directory...');
+  fs.mkdirSync(wellKnownDir, { recursive: true });
+}
+
 // Create A2A adapter
 const adapter = new A2AMCPAdapter({
   client,
-  agentCardPath: path.join(__dirname, '..', '.well-known', 'agent.json')
+  agentCardPath: path.join(wellKnownDir, 'agent.json')
 });
 
 /**
@@ -86,8 +93,21 @@ async function createServer() {
       
       req.on('end', async () => {
         try {
-          // Parse request
-          const request = JSON.parse(body);
+          // Parse request - handle malformed JSON
+          let request;
+          try {
+            request = JSON.parse(body);
+          } catch (parseError) {
+            // Try to fix common JSON escape issues
+            try {
+              // Fix bad escaped characters by replacing invalid escape sequences
+              const fixedBody = body.replace(/\\(?!["\\/bfnrtu])/g, '\\\\');
+              request = JSON.parse(fixedBody);
+              console.log('Successfully recovered from malformed JSON');
+            } catch (recoveryError) {
+              throw parseError; // Use the original error if recovery fails
+            }
+          }
           
           // Process request
           const response = await adapter.handleRequest(request);
@@ -103,7 +123,7 @@ async function createServer() {
             id: null,
             error: {
               code: -32603,
-              message: 'Internal server error'
+              message: 'Internal server error: ' + error.message
             }
           }));
         }
