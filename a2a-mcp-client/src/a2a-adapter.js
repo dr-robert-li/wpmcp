@@ -613,7 +613,7 @@ export class A2AMCPAdapter {
         console.log('Matched flexible create post pattern - attempting to create post');
         
         // Use the helper function to extract post parameters
-        const { title, content, status } = this._extractPostParams(text);
+        const { title, content, status } = extractPostParams(text);
         console.log('Extracted parameters using helper function: ', { title, content, status });
         
         try {
@@ -646,6 +646,107 @@ export class A2AMCPAdapter {
         } catch (error) {
           console.error('Error creating post:', error);
           result = `Error creating post: ${error.message}`;
+        }
+      }
+      else if (lowerText.match(/update\s+post\s+(\d+)/i) || lowerText.match(/edit\s+post\s+(\d+)/i)) {
+        console.log('Matched update/edit post pattern');
+        const postIdMatch = lowerText.match(/post\s+(\d+)/i);
+        const postId = postIdMatch ? postIdMatch[1] : null;
+        
+        if (!postId) {
+          result = "I couldn't determine which post you want to update. Please specify a post ID.";
+        } else {
+          // Extract update parameters (title, content, status)
+          // Use the helper function to extract post parameters
+          const extractedParams = extractPostParams(text);
+          const { title, content, status } = extractedParams;
+          console.log('Extracted update parameters:', { postId, title, content, status });
+          
+          // Create updates object with only the parameters that were actually provided
+          const updates = {};
+          if (title !== 'Untitled Post') updates.title = title;
+          if (content !== 'No content provided.') updates.content = content;
+          if (status && ['publish', 'draft', 'pending', 'private'].includes(status)) {
+            updates.status = status;
+          }
+          
+          // Only proceed if we have at least one valid update parameter
+          if (Object.keys(updates).length > 0) {
+            try {
+              console.log(`Attempting to update post ID: ${postId} with:`, updates);
+              const updateResponse = await this.client.updatePost(postId, updates);
+              console.log('Update response:', updateResponse);
+              
+              result = `Post ID ${postId} was successfully updated.\n\n`;
+              
+              if (updates.title) result += `New title: ${updateResponse.data.title.raw}\n`;
+              result += `Status: ${updateResponse.data.status}\n`;
+              if (updateResponse.data.link) {
+                result += `URL: ${updateResponse.data.link}\n`;
+              }
+              
+              artifacts.push({
+                id: `updated-post-${postId}-${Date.now()}`,
+                type: 'application/json',
+                title: `Updated WordPress Post ${postId}`,
+                description: 'Details of the updated post',
+                parts: [
+                  {
+                    type: 'data',
+                    data: {
+                      contentType: 'application/json',
+                      content: JSON.stringify(updateResponse.data)
+                    }
+                  }
+                ]
+              });
+            } catch (error) {
+              console.error(`Error updating post ${postId}:`, error);
+              result = `Error updating post: ${error.message}`;
+            }
+          } else {
+            result = "I couldn't determine what changes you want to make to the post. Please specify at least one of: title, content, or status.";
+          }
+        }
+      }
+      else if (lowerText.match(/delete\s+post\s+(\d+)/i) || lowerText.match(/remove\s+post\s+(\d+)/i)) {
+        console.log('Matched delete/remove post pattern');
+        const postIdMatch = lowerText.match(/post\s+(\d+)/i);
+        const postId = postIdMatch ? postIdMatch[1] : null;
+        
+        if (!postId) {
+          result = "I couldn't determine which post you want to delete. Please specify a post ID.";
+        } else {
+          try {
+            console.log(`Attempting to delete post ID: ${postId}`);
+            const deleteResponse = await this.client.deletePost(postId);
+            console.log('Delete response:', deleteResponse);
+            
+            result = `Post ID ${postId} was successfully deleted.`;
+            
+            artifacts.push({
+              id: `deleted-post-${postId}-${Date.now()}`,
+              type: 'application/json',
+              title: `Deleted WordPress Post ${postId}`,
+              description: 'Confirmation of post deletion',
+              parts: [
+                {
+                  type: 'data',
+                  data: {
+                    contentType: 'application/json',
+                    content: JSON.stringify({
+                      status: 'success',
+                      postId: postId,
+                      message: `Post ID ${postId} was successfully deleted.`
+                    })
+                  }
+                }
+              ]
+            });
+          } catch (error) {
+            console.error(`Error deleting post ${postId}:`, error);
+            result = `Error deleting post: ${error.message}`;
+          }
         }
       }
       else if (lowerText.includes('list categories') || lowerText.includes('show categories')) {
@@ -812,7 +913,9 @@ export class A2AMCPAdapter {
         result = "I'm a WordPress agent that can help you interact with your WordPress site. Here are some things you can ask me to do:\n\n";
         result += "- list posts\n";
         result += "- show post 123\n";
-        result += "- create post\n";
+        result += "- create post with title \"My Title\", content \"My content\", status \"draft\"\n";
+        result += "- update post 123 with title \"New Title\", content \"Updated content\", status \"publish\"\n";
+        result += "- delete post 123\n";
         result += "- list categories\n";
         result += "- list tags\n";
         result += "- site info\n";
